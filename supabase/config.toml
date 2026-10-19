@@ -1,0 +1,4 @@
+project_id = "qrcpprvxjgcnlxyushsg"
+
+[functions.send-manifest]
+verify_jwt = true
