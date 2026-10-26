@@ -32,7 +32,7 @@ Deno.serve(async req => {
   const user=await auth.json();
   const {id,action}=await req.json();
   if(action==='verify') {
-   const membership=await fetch(url+'/rest/v1/app_members?select=role&user_id=eq.'+user.id,{headers:{apikey:key,Authorization:authorization}});
+   const membership=await fetch(url+'/rest/v1/app_members?select=role&active=eq.true&user_id=eq.'+user.id,{headers:{apikey:key,Authorization:authorization}});
    if(!membership.ok)return result({message:'Acesso negado'},403);
    const members=await membership.json();
    if(members[0]?.role!=='admin')return result({message:'Somente administradores podem testar a conexão.'},403);
@@ -52,18 +52,29 @@ Deno.serve(async req => {
   if(doc.email_status==='sent')return result({sent:true});
   const gmail=gmailTransport();
   if(!gmail)return result({message:'Configure GMAIL_USER e GMAIL_APP_PASSWORD nos segredos do Supabase.'},503);
-  if(!Array.isArray(doc.email_recipients)||doc.email_recipients.length!==3)return result({message:'Destinatários não cadastrados'},409);
+  if(!Array.isArray(doc.email_recipients)||doc.email_recipients.length<1||doc.email_recipients.length>33)return result({message:'Destinatários não cadastrados'},409);
+  const claimed=await fetch(url+'/rest/v1/rpc/claim_manifest_email',{method:'POST',headers:{apikey:key,Authorization:authorization,'Content-Type':'application/json'},body:JSON.stringify({p_id:id})});
+  const claim=await claimed.json();
+  if(!claimed.ok)return result({message:claim.message||'Não foi possível reservar o envio.'},409);
+  if(claim.sent)return result({sent:true});
+  if(claim.blocked)return result({message:claim.message},409);
+  if(!claim.token||!claim.document)return result({message:'Reserva de envio inválida.'},502);
+  // Use only the frozen server document returned by the atomic claim.
+  Object.assign(doc,claim.document);
+  const finish=async(state:string,provider:string|null=null,code:string|null=null)=>{
+   const response=await fetch(url+'/rest/v1/rpc/finish_manifest_email',{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({p_id:id,p_token:claim.token,p_state:state,p_provider:provider,p_code:code})});
+   return response.ok;
+  };
   const number=String(doc.number).padStart(6,'0');
   const time=(v:string)=>new Date(v).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'});
   const html=`<div style="font-family:Arial,sans-serif;color:#282d36;max-width:900px"><h2 style="color:#cc2631">MONDRAGON ASSEMBLY</h2><h1>Romaneio digital #${number}</h1><p>Projeto: ${escapeHtml(doc.project)}<br>Estação: ${escapeHtml(doc.station)}<br>Responsável: ${escapeHtml(doc.responsible)}<br>Confirmado em: ${time(doc.confirmed_at)}<br>Itens: ${doc.items.length} · Caixas: ${doc.boxes.length}</p>${doc.boxes.map((box:any,index:number)=>`<h3>${escapeHtml(box.name)} · Caixa ${index+1}/${doc.boxes.length}</h3><table border="1" cellpadding="9" cellspacing="0" style="border-collapse:collapse;border-color:#eee"><thead><tr><th>BMA</th><th>Projeto</th><th>Estação</th><th>Qtd.</th><th>Pedido</th><th>Item do pedido</th><th>Leitura</th><th>Almoxarife</th></tr></thead><tbody>${doc.items.filter((item:any)=>item.box===box.id).map((item:any)=>`<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.project)}</td><td>${escapeHtml(item.station)}</td><td>${Number(item.qty).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${escapeHtml(item.purchase_order||'—')}</td><td>${escapeHtml(item.purchase_order_item||'—')}</td><td>${time(item.scanned_at)}</td><td>${escapeHtml(item.operator)}</td></tr>`).join('')}</tbody></table>`).join('')}<p style="color:#888;font-size:12px">Registro gerado pelo Almoxarifado Digital Mondragon.</p></div>`;
   let info;
   try {
    info=await gmail.transport.sendMail({from:{name:'Mondragon',address:gmail.user},to:[...new Set(doc.email_recipients)],subject:`Romaneio #${number} — ${doc.project}`,html,messageId:`<romaneio-${id}@gmail.com>`});
-  }catch(error){return result({message:gmailError(error)},502);}
+  }catch(error){await finish((error as any)?.code==='EAUTH'?'failed':'uncertain',null,(error as any)?.code==='EAUTH'?'auth_rejected':'smtp_uncertain');return result({message:gmailError(error)},502);}
   finally{gmail.transport.close();}
-  if(info.rejected?.length)return result({message:'Gmail recusou parte dos destinatários. Confira Enviados antes de repetir o envio.'},502);
-  const updated=await fetch(url+`/rest/v1/picking_documents?id=eq.${id}`,{method:'PATCH',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({email_status:'sent',email_provider_id:info.messageId})});
-  if(!updated.ok)return result({message:'E-mail aceito pelo Gmail, mas o status não pôde ser atualizado. Confira Enviados antes de tentar novamente.'},502);
+  if(info.rejected?.length){await finish('uncertain',info.messageId,'partial_rejection');return result({message:'Gmail recusou parte dos destinatários. Confira Enviados e solicite reconciliação antes de repetir o envio.'},502);}
+  if(!await finish('sent',info.messageId))return result({message:'E-mail aceito pelo Gmail, mas o status não pôde ser atualizado. Confira Enviados antes de tentar novamente.'},502);
   return result({sent:true});
  }catch{return result({message:'Falha ao processar o envio. Tente novamente.'},500);}
 });
