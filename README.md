@@ -70,7 +70,7 @@ O projeto e a chave **publishable** fornecidos já estão configurados em `publi
 2. O esquema atual `supabase/schema.sql` foi instalado no destino em 19/10/2026 após confirmar que estava vazio. Não execute novamente. A migração histórica do QR já está incorporada nesse esquema.
 3. Em Authentication > Users, crie os usuários de teste com e-mail e senha.
 4. Autorize cada usuário na tabela `app_members`, usando o UUID real de Authentication, o nome completo e o papel `operator` ou `admin`. Há um exemplo SQL comentado no fim do arquivo.
-5. Entre com um administrador e cadastre os três destinatários em Configurações.
+5. Entre com um administrador, cadastre PCP e Almoxarifado como destinatários fixos e os Gestores por Projeto.
 
 O banco gera a numeração sequencial, registra o responsável e a hora da leitura no servidor e preserva essas informações durante a edição. Apenas o proprietário edita seus rascunhos. Usuários autorizados podem consultar os romaneios da equipe. Após confirmar, o documento fica imutável pelas APIs de usuário. Os destinatários são congelados na confirmação.
 
@@ -90,7 +90,7 @@ Publique supabase/functions/send-manifest/index.ts pelo painel. A dependência N
 
 No sistema, entre como administrador e abra Configurações → Testar conexão com Gmail. Essa ação verifica conexão TLS e autenticação, sem enviar mensagem. Ao confirmar o romaneio, a aplicação tenta enviar o e-mail automaticamente. Se necessário, o botão Enviar e-mail permite nova tentativa controlada. Confira a mensagem em Enviados no Gmail e na caixa do destinatário. Aceitação SMTP não comprova entrega final.
 
-O SMTP não oferece a chave de idempotência do Resend. Um Message-ID estável facilita rastreio, mas não garante deduplicação. Se o envio tiver resposta incerta, destinatários parcialmente recusados ou falha ao salvar o status, confira Enviados antes de tentar novamente. Envios simultâneos por várias abas não estão protegidos por trava distribuída. Não há fila de retentativas em segundo plano.
+O SMTP não oferece a chave de idempotência do Resend. Um Message-ID estável facilita rastreio, mas não garante deduplicação. Se o envio tiver resposta incerta, destinatários parcialmente recusados ou falha ao salvar o status, confira Enviados antes de tentar novamente. Os envios usam reserva atômica no banco. Uma chamada simultânea é bloqueada. Timeout, interrupção ou recusa parcial exigem conferência no Gmail e reconciliação administrativa auditada antes de liberar outra tentativa. Não há fila de retentativas em segundo plano.
 
 Referências: [Google: senhas de aplicativo](https://support.google.com/mail/answer/185833), [Supabase: limites de rede](https://supabase.com/docs/guides/functions/limits).
 
@@ -103,3 +103,13 @@ node --test --test-isolation=none
 Os 16 testes originais passaram antes das alterações. Foram adicionados três testes de migração. Consulte MIGRATION-REPORT.md para distinguir testes locais e homologação real. O histórico anterior está preservado em README-PILOTO.md e não comprova a implantação oficial.
 
 Este sistema não realiza baixa de estoque, integração ERP ou assinatura eletrônica certificada. Não possui controle de versões de edição nem fila de e-mail.
+
+## Gestores, destinatários e usuários (26/10/2026)
+
+Aplique somente as migrações incrementais `20261026044735_project_managers_recipients_users.sql` e `20261026045354_invitation_dispatch_guard.sql` em instalações existentes. Não execute novamente `schema.sql`. Publique `send-manifest` e `manage-users` com as configurações de autenticação de `supabase/config.toml`.
+
+Configurações mantém PCP e Almoxarifado fixos. O gestor é selecionado pelo projeto exato normalizado (espaços externos e maiúsculas), preservando zeros. Apenas um registro ativo por projeto. Projetos sem gestor continuam como rascunho; somente administrador pode autorizar uma exceção explícita e justificada. Antes de confirmar, confira os destinatários, acrescente até 30 adicionais e confirme a lista efetiva. O servidor recalcula e congela os destinatários; documentos antigos preservam suas listas.
+
+Usuários do Sistema aparece apenas ao administrador. Novos usuários recebem convite do Supabase Auth e definem a própria senha (mínimo de 12 caracteres no formulário). Configure o Site URL e o redirect permitido como `https://almoxarifadomondragon.github.io/smart/`. O envio de convites depende do SMTP/limites do Auth, separado dos segredos Gmail da função de romaneios. Nome, perfil e status podem ser editados; o último administrador ativo é protegido por trava transacional. A desativação bloqueia as RPCs e o acesso por RLS mesmo com JWT válido. Nenhum usuário Auth é apagado automaticamente.
+
+Auditoria e tentativas ficam em `smart_private.audit_log`, `user_invites` e `email_attempts`, sem acesso direto pelo frontend. Falhas entre Auth e vínculo ficam bloqueadas e registradas para reconciliação no painel; não repita convites em estado pendente/incerto. Migrações são transacionais. Não há rollback destrutivo automático: preserve snapshots e auditoria e use uma nova migração corretiva.
