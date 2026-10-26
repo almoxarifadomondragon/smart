@@ -18,14 +18,22 @@ export const logout = () => request('/auth/v1/logout','POST');
 export const listDocuments = () => request('/rest/v1/picking_documents?select=*&order=number.desc');
 export const createDocument = (project,station) => request('/rest/v1/rpc/create_picking','POST',{p_project:project,p_station:station});
 export const saveDocument = doc => request('/rest/v1/rpc/save_picking','POST',{p_id:doc.id,p_project:doc.project,p_station:doc.station,p_boxes:doc.boxes,p_items:doc.items});
-export const finalizeDocument = id => request('/rest/v1/rpc/finalize_picking','POST',{p_id:id});
+export const finalizeDocument = (id,approval) => request('/rest/v1/rpc/finalize_picking','POST',{p_id:id,p_additional:approval.additional,p_exception_reason:approval.reason,p_expected:approval.fingerprint});
 export const sendManifest = id => request('/functions/v1/send-manifest','POST',{id});
 export const verifyGmail = () => request('/functions/v1/send-manifest','POST',{action:'verify'});
 export const getRecipients = () => request('/rest/v1/notification_recipients?select=role,email&order=role');
 export const saveRecipients = recipients => request('/rest/v1/rpc/set_recipients','POST',{p_recipients:recipients});
 
 export async function getMembership(userId) {
- const rows=await request('/rest/v1/app_members?select=user_id,full_name,role&user_id=eq.'+encodeURIComponent(userId));
+ const rows=await request('/rest/v1/app_members?select=user_id,full_name,role&active=eq.true&user_id=eq.'+encodeURIComponent(userId));
  if(!rows?.length)throw new Error('Usuário não autorizado no almoxarifado. Solicite acesso ao administrador.');
  return rows[0];
 }
+export const getManagers=()=>request('/rest/v1/project_managers?select=*&order=project_code');
+export const saveManager=m=>request('/rest/v1/rpc/save_project_manager','POST',{p_id:m.id||null,p_project:m.project_code,p_email:m.email,p_active:m.active});
+export const previewRecipients=(id,additional,reason)=>request('/rest/v1/rpc/preview_recipients','POST',{p_id:id,p_additional:additional,p_exception_reason:reason||null});
+export const manageUsers=body=>request('/functions/v1/manage-users','POST',body);
+export const resolveEmail=(id,sent,note)=>request('/rest/v1/rpc/resolve_manifest_email','POST',{p_id:id,p_sent:sent,p_note:note});
+export const authUser=()=>request('/auth/v1/user');
+export const setPassword=password=>request('/auth/v1/user','PUT',{password});
+export const verifyPasswordLink=(token_hash,type)=>request('/auth/v1/verify','POST',{token_hash,type});
