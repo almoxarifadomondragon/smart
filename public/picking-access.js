@@ -15,6 +15,6 @@ export function showOperationError(document,message){
  const modal=document.querySelector('#modal');
  if(!modal?.open)return false;
  let alert=modal.querySelector('[data-modal-error]');
- if(!alert){alert=document.createElement('p');alert.dataset.modalError='';alert.className='error';alert.setAttribute('role','alert');alert.tabIndex=-1;modal.prepend(alert);}
+ if(!alert){alert=document.createElement('p');alert.dataset.modalError='';alert.className='error';alert.setAttribute('role','alert');alert.setAttribute('style','white-space:pre-line');alert.tabIndex=-1;modal.prepend(alert);}
  alert.textContent=operationMessage(message);alert.focus();alert.scrollIntoView({block:'nearest'});return true;
 }

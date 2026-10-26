@@ -67,6 +67,7 @@ export async function reviewRecipients(doc,ctx,options={}){
 }
 export function recipientApproval(doc){const state=drafts.get(doc.id);if(!state?.approved)throw new Error('Confira a lista completa dos destinatários antes de confirmar.');const a=state.approved;return {additional:[...a.additional],reason:a.reason,fingerprint:a.fingerprint,emails:[...a.emails]};}
 export function confirmationFailure(error){
+ if(error.code==='P4223')return {kind:'destination',message:error.message+' O romaneio continua em rascunho. Regularize os destinos antes de confirmar.'};
  if(error.code==='P4091'||error.message==='Confira novamente os destinatários: o cadastro pode ter mudado.')return {kind:'changed',message:'Os destinatários mudaram desde a conferência. Revise o cadastro atualizado e clique em Conferir destinatários para aprovar novamente. Nada foi confirmado ou enviado.'};
  if(error.code==='P4221')return {kind:'registry',message:'Pendência no cadastro de destinatários: '+error.message+' O romaneio continua em rascunho.'};
  return {kind:'technical',message:'Falha ao confirmar o romaneio: '+error.message+' Confira o estado do documento antes de tentar novamente.'};

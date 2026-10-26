@@ -1,4 +1,29 @@
 export const pad = n => String(n).padStart(6,'0');
+// Mesma regra de smart_private.destination_code: espaços ASCII nas pontas e a-z.
+// Identificadores textuais; não converter números nem remover zeros à esquerda.
+export const normalizeDestinationCode=value=>String(value??'').replace(/^[ \t\n\r\f\v]+|[ \t\n\r\f\v]+$/g,'').replace(/[a-z]/g,c=>c.toUpperCase());
+export function destinationError(expected,found){
+ const error=new Error('Peça não pertence a esta separação.\nProjeto esperado: '+(normalizeDestinationCode(expected.project)||'Não definido')+'\nEstação esperada: '+(normalizeDestinationCode(expected.station)||'Não definida')+'\nProjeto identificado no QR Code: '+(normalizeDestinationCode(found.project)||'Não informado')+'\nEstação identificada no QR Code: '+(normalizeDestinationCode(found.station)||'Não informada'));
+ error.code='DESTINATION_MISMATCH';return error;
+}
+export function destinationIssues(doc){return (doc.items||[]).filter(item=>!normalizeDestinationCode(doc.project)||!normalizeDestinationCode(doc.station)||normalizeDestinationCode(item.project)!==normalizeDestinationCode(doc.project)||normalizeDestinationCode(item.station)!==normalizeDestinationCode(doc.station));}
+export function assertUniformDestination(doc){const issues=destinationIssues(doc);if(issues.length)throw destinationError(doc,issues[0]);return true;}
+export function resolveItemDestination(doc,item,{allowMissing=false}={}){
+ const expected={project:normalizeDestinationCode(doc.project),station:normalizeDestinationCode(doc.station)};
+ const found={project:normalizeDestinationCode(item.project),station:normalizeDestinationCode(item.station)};
+ if(['project','station'].some(key=>expected[key]&&found[key]&&expected[key]!==found[key]))throw destinationError(expected,found);
+ const result={project:expected.project||found.project,station:expected.station||found.station};
+ if(!allowMissing&&(!result.project||!result.station))throw new Error('Preencha o projeto e a estação da primeira peça para definir o destino do romaneio.');
+ return result;
+}
+export function validateDestinationSave(previous,next){
+ if(next.items.length){
+  const locked=previous.items.length>0;
+  if(['project','station'].some(key=>(locked||normalizeDestinationCode(previous[key]))&&normalizeDestinationCode(previous[key])!==normalizeDestinationCode(next[key])))throw new Error('Projeto e estação de referência não podem ser alterados ao registrar peças. Antes da primeira peça, salve o destino desejado; após a primeira, remova todas as peças para redefini-lo.');
+  if(destinationIssues(previous).length&&next.items.some(i=>!previous.items.some(p=>p.id===i.id)))throw new Error('Rascunho com destinos inconsistentes. Novas inclusões estão bloqueadas até a regularização controlada dos itens existentes.');
+ }
+ return assertUniformDestination(next);
+}
 export function parseQuantity(raw) {
   const text = String(raw ?? '').trim();
   if (!/^\d+(?:[.,]\d{1,2})?$/.test(text)) throw new Error('Informe uma quantidade positiva com até 2 casas decimais. Ex.: 1,00.');
@@ -56,6 +81,7 @@ export function validateManifest(doc) {
   if (!doc.project?.trim() || !doc.station?.trim()) throw new Error('Preencha o projeto e a estação.');
   if (!doc.items.length) throw new Error('Adicione ao menos um item.');
   if (!doc.boxes.length) throw new Error('Crie ao menos uma caixa.');
+  assertUniformDestination(doc);
   for (const item of doc.items) {
     parseCode(item.code);
     if (!item.project?.trim() || !item.station?.trim()) throw new Error('Todos os itens precisam ter projeto e estação.');
