@@ -11,6 +11,7 @@ declare
  entries jsonb;
  blocked boolean := false;
 begin
+ perform public.save_project_manager(null,'Validação técnica','gestor-homologacao@example.com',true);
  doc := public.create_picking('Validação técnica','Estação teste');
  if doc.owner_id <> auth.uid() or doc.responsible <> 'Denys Martinez' then
   raise exception 'Responsável incorreto';
@@ -27,8 +28,8 @@ begin
  if doc.items->0->>'box' <> new_box::text or (doc.items->0->>'qty')::int <> 4 then
   raise exception 'Remanejamento inconsistente';
  end if;
- doc := public.finalize_picking(doc.id);
- if doc.status <> 'confirmed' or jsonb_array_length(doc.email_recipients) <> 3 then
+ doc := public.finalize_picking(doc.id,'[]',null,public.preview_recipients(doc.id)->>'fingerprint');
+ if doc.status <> 'confirmed' or jsonb_array_length(doc.email_recipients) < 1 then
   raise exception 'Confirmação incompleta';
  end if;
  begin

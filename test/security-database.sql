@@ -15,7 +15,7 @@ begin
  begin
   perform public.set_recipients('[{"role":"PCP","email":"nao-enviar@example.com"},{"role":"Gestor","email":"nao-enviar@example.com"},{"role":"Almoxarifado","email":"nao-enviar@example.com"}]');
  exception when others then
-  if sqlerrm='Somente administradores podem cadastrar destinatários.' then rejected:=true; else raise; end if;
+  if sqlstate='42501' then rejected:=true; else raise; end if;
  end;
  if not rejected then raise exception 'Operador alterou destinatários'; end if;
  rejected:=false;
