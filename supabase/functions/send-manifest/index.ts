@@ -52,7 +52,7 @@ Deno.serve(async req => {
   if(doc.email_status==='sent')return result({sent:true});
   const gmail=gmailTransport();
   if(!gmail)return result({message:'Configure GMAIL_USER e GMAIL_APP_PASSWORD nos segredos do Supabase.'},503);
-  if(!Array.isArray(doc.email_recipients)||doc.email_recipients.length<1||doc.email_recipients.length>33)return result({message:'Destinatários não cadastrados'},409);
+  if(!Array.isArray(doc.email_recipients)||doc.email_recipients.length<1||doc.email_recipients.length>91)return result({message:'Destinatários não cadastrados'},409);
   const claimed=await fetch(url+'/rest/v1/rpc/claim_manifest_email',{method:'POST',headers:{apikey:key,Authorization:authorization,'Content-Type':'application/json'},body:JSON.stringify({p_id:id})});
   const claim=await claimed.json();
   if(!claimed.ok)return result({message:claim.message||'Não foi possível reservar o envio.'},409);
