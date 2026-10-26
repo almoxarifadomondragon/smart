@@ -16,6 +16,7 @@ async function request(path,method='GET',body) {
 export const login = (email,password) => request('/auth/v1/token?grant_type=password','POST',{email,password});
 export const logout = () => request('/auth/v1/logout','POST');
 export const listDocuments = () => request('/rest/v1/picking_documents?select=*&order=number.desc');
+export async function getDocument(id){const rows=await request('/rest/v1/picking_documents?select=*&id=eq.'+encodeURIComponent(id));if(!rows?.length)throw new Error('Separação não encontrada ou sem permissão de consulta.');return rows[0];}
 export const createDocument = (project,station) => request('/rest/v1/rpc/create_picking','POST',{p_project:project,p_station:station});
 export const saveDocument = doc => request('/rest/v1/rpc/save_picking','POST',{p_id:doc.id,p_project:doc.project,p_station:doc.station,p_boxes:doc.boxes,p_items:doc.items});
 export const finalizeDocument = (id,approval) => request('/rest/v1/rpc/finalize_picking','POST',{p_id:id,p_additional:approval.additional,p_exception_reason:approval.reason,p_expected:approval.fingerprint});
