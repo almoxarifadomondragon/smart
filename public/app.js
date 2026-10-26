@@ -1,6 +1,6 @@
 import {boxLink,boxRoute,boxDetails} from './labels.js';
 import * as api from './api.js';
-import {settingsView,bindSettings as bindAdministration,reviewRecipients,recipientApproval,normalizeProject} from './administration.js';
+import {settingsView,bindSettings as bindAdministration,reviewRecipients,recipientApproval,confirmationFailure,confirmReviewedDocument,normalizeProject} from './administration.js';
 import {pad,parseQR,parseCode,parseQuantity,validatePurchase,formatQty,totalQty,manifestCsv,validateManifest} from './domain.js';
 const $ = s=>document.querySelector(s);
 const esc = v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -70,7 +70,13 @@ document.addEventListener('click',e=>{const button=e.target.closest('button');if
  if(action==='delete-item'){const old=structuredClone(doc);doc.items=doc.items.filter(i=>i.id!==id);try{await persist(doc);}catch(e){Object.assign(doc,old);throw e;}render();toast('Item removido.');}
  if(action==='delete-box'){if(doc.items.some(i=>i.box===id))throw new Error('Remaneje os itens desta caixa antes de removê-la.');if(doc.boxes.length===1)throw new Error('Mantenha ao menos uma caixa.');const old=structuredClone(doc);doc.boxes=doc.boxes.filter(b=>b.id!==id);try{await persist(doc);}catch(e){Object.assign(doc,old);throw e;}closeModal();render();}
  if(action==='review'){validateManifest(doc);if(!demo){recipients=await api.getRecipients();managers=await api.getManagers();}$('#page').innerHTML=documentView(doc,true);await reviewRecipients(doc,settingsContext());}
- if(action==='confirm'){validateManifest(doc);const approval=recipientApproval(doc);if(demo){doc.email_recipients=approval.emails;doc.status='confirmed';doc.confirmed_at=new Date().toISOString();doc.email_status='demo';store();render();toast('Romaneio confirmado. Envio de e-mail simulado.');}else{const result=await api.finalizeDocument(doc.id,approval);Object.assign(doc,result);render();await sendEmail(doc);}}
+ if(action==='confirm'){validateManifest(doc);const approval=recipientApproval(doc);if(demo){doc.email_recipients=approval.emails;doc.status='confirmed';doc.confirmed_at=new Date().toISOString();doc.email_status='demo';store();render();toast('Romaneio confirmado. Envio de e-mail simulado.');}else{try{await confirmReviewedDocument(doc,approval,{confirmed:()=>render(),send:sendEmail});}catch(error){
+ const failure=confirmationFailure(error);
+ try{const latest=(await api.listDocuments()).find(d=>d.id===doc.id);if(latest)Object.assign(doc,latest);}catch{}
+ if(doc.status==='confirmed'){render();toast('A confirmação foi registrada no servidor. Confira o status do e-mail no romaneio.');return;}
+ try{[recipients,managers]=await Promise.all([api.getRecipients(),api.getManagers()]);}catch{failure.message+=' Não foi possível atualizar o cadastro; tente novamente.';}
+ $('#page').innerHTML=documentView(doc,true);await reviewRecipients(doc,settingsContext(),{requireApproval:true,message:failure.message});toast(failure.message);
+ }}}
  if(action==='send'){await sendEmail(doc);}
  if(action==='reconcile'){showModal('<h2>Conferir envio no Gmail</h2><p>Consulte Enviados e os destinatários antes de decidir. Uma nova tentativa pode duplicar uma mensagem já aceita.</p><form id="reconcile-form"><label class="field">Resultado<select name="sent"><option value="true">Envio comprovado no Gmail</option><option value="false">Não enviado: liberar nova tentativa</option></select></label>'+field('Registro da conferência','reconcile-note','','required minlength="10" maxlength="500"')+'<button class="primary">Registrar conferência</button><button type="button" data-action="close">Cancelar</button></form>');$('#reconcile-form').onsubmit=e=>{e.preventDefault();transaction(async()=>{await api.resolveEmail(doc.id,new FormData(e.target).get('sent')==='true',$('#reconcile-note').value);Object.assign(doc,(await api.listDocuments()).find(x=>x.id===doc.id));closeModal();render();});};}
  if(action==='verify-gmail'){const output=$('#gmail-result');output.textContent='Verificando conexão segura com Gmail…';try{const checked=await api.verifyGmail();output.textContent=checked.message;}catch(error){output.textContent=error.message;}}

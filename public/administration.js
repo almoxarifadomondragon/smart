@@ -33,12 +33,13 @@ export function bindSettings(ctx){
 }
 
 const drafts=new Map();
-export async function reviewRecipients(doc,ctx){
+export async function reviewRecipients(doc,ctx,options={}){
  const {demo,admin,recipients,managers}=ctx;
  const state=drafts.get(doc.id)||{additional:[],reason:'',approved:null,error:''};drafts.set(doc.id,state);
+ state.revision=(state.revision||0)+1;state.approved=null;state.error=options.message||'';
  const panel=document.createElement('section');panel.className='card no-print';panel.id='recipient-review';q('#page').append(panel);
  const read=()=>{state.additional=Array.from(panel.querySelectorAll('[data-additional]')).map(x=>x.value);state.reason=panel.querySelector('[name="exception"]')?.checked?panel.querySelector('[name="reason"]').value.trim():'';};
- const dirty=()=>{state.approved=null;const confirm=q('[data-action="confirm"]');if(confirm)confirm.disabled=true;};
+ const dirty=()=>{state.revision++;state.approved=null;const confirm=q('[data-action="confirm"]');if(confirm)confirm.disabled=true;};
  const draw=()=>{
   const manager=managers.find(m=>m.active&&normalizeProject(m.project_code)===normalizeProject(doc.project));
   panel.innerHTML=`<div class="card-head"><h2>Conferir destinatários</h2></div><div class="card-body"><p>PCP e Almoxarifado são fixos. O gestor é selecionado pelo código exato do projeto.</p><ul>${['PCP','Almoxarifado'].map(role=>`<li>${role}: ${esc(recipients.find(r=>r.role===role)?.email||'Não cadastrado')}</li>`).join('')}<li>Gestor: ${esc(manager?.email||'Projeto sem gestor ativo')}</li></ul>${!manager&&admin?`<label><input name="exception" type="checkbox" style="width:auto" ${state.reason?'checked':''}> Autorizar explicitamente uma exceção sem gestor</label>${field('Justificativa da exceção (10 a 500 caracteres)','reason',state.reason,'minlength="10" maxlength="500"')}`:''}<div>${state.additional.map((email,i)=>`<div class="scan-row" style="margin:10px 0"><input data-additional="${i}" type="email" aria-label="Destinatário adicional ${i+1}" value="${esc(email)}" maxlength="254" required><button type="button" data-remove-additional="${i}">Remover</button></div>`).join('')}</div><button type="button" data-add-recipient>+ Incluir destinatário</button> <button type="button" data-check-recipients>Conferir destinatários</button><p role="status" class="error">${esc(state.error)}</p>${state.approved?`<h3>Lista efetiva de envio</h3><ul>${state.approved.emails.map(e=>`<li>${esc(e)}</li>`).join('')}</ul><p>Esta relação será congelada na confirmação.</p>`:''}</div>`;
@@ -49,13 +50,29 @@ export async function reviewRecipients(doc,ctx){
  };
  const check=async()=>{
   read();dirty();state.error='';
+  const revision=state.revision;
   try{
    state.additional=normalizeEmails(state.additional);
-   if(demo){const manager=managers.find(m=>m.active&&normalizeProject(m.project_code)===normalizeProject(doc.project));if(!manager&&!state.reason)throw new Error('Cadastre um gestor ativo ou autorize explicitamente uma exceção.');if(state.reason.length>0&&state.reason.length<10)throw new Error('Descreva a justificativa com ao menos 10 caracteres.');const fixed=['PCP','Almoxarifado'].map(r=>recipients.find(x=>x.role===r)?.email||'');if(fixed.some(x=>!x))throw new Error('Cadastre PCP e Almoxarifado.');state.approved={emails:normalizeEmails([...fixed,...(manager?[manager.email]:[]),...state.additional],33),fingerprint:'demo'};}
-   else state.approved=await api.previewRecipients(doc.id,state.additional,state.reason);
-  }catch(error){state.error=error.message;}
+   const additional=[...state.additional],reason=state.reason||null;
+   let snapshot;
+   if(demo){const manager=managers.find(m=>m.active&&normalizeProject(m.project_code)===normalizeProject(doc.project));if(!manager&&!state.reason)throw new Error('Cadastre um gestor ativo ou autorize explicitamente uma exceção.');if(state.reason.length>0&&state.reason.length<10)throw new Error('Descreva a justificativa com ao menos 10 caracteres.');const fixed=['PCP','Almoxarifado'].map(r=>recipients.find(x=>x.role===r)?.email||'');if(fixed.some(x=>!x))throw new Error('Cadastre PCP e Almoxarifado.');snapshot={emails:normalizeEmails([...fixed,...(manager?[manager.email]:[]),...additional],33),fingerprint:'demo'};}
+   else snapshot=await api.previewRecipients(doc.id,additional,reason);
+   if(revision!==state.revision||!panel.isConnected)return;
+   if(!snapshot?.fingerprint||!Array.isArray(snapshot.emails))throw new Error('Falha técnica ao conferir destinatários. Tente conferir novamente.');
+   state.approved={...snapshot,additional,reason};
+  }catch(error){if(revision!==state.revision||!panel.isConnected)return;state.error=error.code==='P4221'?'Cadastro de destinatários incompleto: '+error.message:error.message;}
   draw();const confirm=q('[data-action="confirm"]');if(confirm)confirm.disabled=!state.approved;
  };
- draw();await check();
+ dirty();draw();if(!options.requireApproval)await check();
 }
-export function recipientApproval(doc){const state=drafts.get(doc.id);if(!state?.approved)throw new Error('Confira a lista completa dos destinatários antes de confirmar.');return {additional:state.additional,reason:state.reason||null,fingerprint:state.approved.fingerprint,emails:state.approved.emails};}
+export function recipientApproval(doc){const state=drafts.get(doc.id);if(!state?.approved)throw new Error('Confira a lista completa dos destinatários antes de confirmar.');const a=state.approved;return {additional:[...a.additional],reason:a.reason,fingerprint:a.fingerprint,emails:[...a.emails]};}
+export function confirmationFailure(error){
+ if(error.code==='P4091'||error.message==='Confira novamente os destinatários: o cadastro pode ter mudado.')return {kind:'changed',message:'Os destinatários mudaram desde a conferência. Revise o cadastro atualizado e clique em Conferir destinatários para aprovar novamente. Nada foi confirmado ou enviado.'};
+ if(error.code==='P4221')return {kind:'registry',message:'Pendência no cadastro de destinatários: '+error.message+' O romaneio continua em rascunho.'};
+ return {kind:'technical',message:'Falha ao confirmar o romaneio: '+error.message+' Confira o estado do documento antes de tentar novamente.'};
+}
+export async function confirmReviewedDocument(doc,approval,{finalize=api.finalizeDocument,confirmed,send}){
+ const result=await finalize(doc.id,approval);
+ if(result?.id!==doc.id||result.status!=='confirmed')throw new Error('O servidor não comprovou a confirmação do documento.');
+ Object.assign(doc,result);await confirmed();await send(doc);
+}

@@ -10,7 +10,7 @@ async function request(path,method='GET',body) {
   }
   const response = await fetch(URL+path,{method,headers:{apikey:KEY,...(session?{Authorization:`Bearer ${session.access_token}`} : {}),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
   const data = await response.json().catch(()=>null);
-  if (!response.ok) throw new Error(data?.msg || data?.message || data?.error_description || 'Não foi possível conectar ao Supabase.');
+  if (!response.ok) {const error=new Error(data?.msg || data?.message || data?.error_description || 'Não foi possível conectar ao Supabase.');error.code=data?.code;error.status=response.status;throw error;}
   return data;
 }
 export const login = (email,password) => request('/auth/v1/token?grant_type=password','POST',{email,password});
