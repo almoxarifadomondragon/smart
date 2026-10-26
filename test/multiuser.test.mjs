@@ -64,9 +64,9 @@ test('modal recebe erro acessível e mantém campos preenchidos; erro de proprie
 test('A e B trabalham em documentos separados; persistência de B não altera A',async()=>{
  const a=doc('a','A',170),b=doc('b','B',171),server=new Map([['a',a],['b',b]]),A=app('A',server),B=app('B',server);
  await A.login();await B.login();assert.equal(A.run('current'),'a');assert.equal(B.run('current'),'b');
- await B.run("getDoc().items.push({id:'b-item',code:'BMA0000002',qty:1,box:'box-b'});persist(getDoc())");
+ await B.run("getDoc().items.push({id:'b-item',code:'BMA0000002',project:getDoc().project,station:getDoc().station,qty:1,box:'box-b'});persist(getDoc())");
  assert.equal(server.get('a').items.length,0);assert.equal(server.get('b').items.length,1);
- await A.run("getDoc().items.push({id:'a-item',code:'BMA0000001',qty:1,box:'box-a'});persist(getDoc())");
+ await A.run("getDoc().items.push({id:'a-item',code:'BMA0000001',project:getDoc().project,station:getDoc().station,qty:1,box:'box-a'});persist(getDoc())");
  assert.equal(server.get('a').items.length,1);assert.equal(server.get('b').items.length,1);
 });
 

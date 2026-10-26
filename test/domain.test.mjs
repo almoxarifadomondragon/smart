@@ -30,7 +30,7 @@ test('decimais e zeros iniciais preservados nos identificadores',()=>{
  assert.equal(item.purchase_order,'021117');assert.equal(item.purchase_order_item,'01');
  assert.equal(totalQty([{qty:0.1},{qty:0.2}]),0.3);
  assert.equal(parseQuantity(formatQty(1234.5)),1234.5);
- const doc=make();doc.items[0]={...doc.items[0],...item};assert.equal(validateManifest(doc),true);
+ const doc=make();doc.project=item.project;doc.station=item.station;doc.items[0]={...doc.items[0],...item};assert.equal(validateManifest(doc),true);
 });
 test('recusa QR incompleto e pedido/quantidade inválidos',()=>{
  for(const code of ['180$BMA0013539$25024$31133$1,00$21117','180$BMA0013539$$31133$1,00$21117$1','180$BMA0013539$25024$31133$0,00$21117$1','180$BMA0013539$25024$31133$1,234$21117$1','180$BMA0013539$25024$31133$1,00$21117$X','180$BMA0013539$25024$31133$1,00$21117$1$extra'])assert.throws(()=>parseQR(code));

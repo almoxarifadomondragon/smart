@@ -14,7 +14,7 @@ begin
   overriding system value
   values(-(txid_current()*100+idx),auth.uid(),'Fixture transacional',case when idx=4 then project||'-EXCECAO' else project end,'1',
    jsonb_build_array(jsonb_build_object('id',box,'name','Caixa 01')),
-   jsonb_build_array(jsonb_build_object('id',gen_random_uuid(),'code','BMA0000001','project',project,'station','1','qty',1,'box',box))) returning * into d;
+   jsonb_build_array(jsonb_build_object('id',gen_random_uuid(),'code','BMA0000001','project',case when idx=4 then project||'-EXCECAO' else project end,'station','1','qty',1,'box',box))) returning * into d;
   ids:=array_append(ids,d.id);
  end loop;
 
