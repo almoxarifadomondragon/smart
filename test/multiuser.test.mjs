@@ -1,3 +1,5 @@
+import * as history from '../public/history.js';
+// The history test also exercises the real application navigation and cache.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -7,14 +9,15 @@ import * as domain from '../public/domain.js';
 import {boxDetails,boxRoute} from '../public/labels.js';
 const doc=(id,owner,number)=>({id,owner_id:owner,number,status:'draft',project:'25024',station:'31133',responsible:'Operador '+owner,created_at:'2026-10-26T12:00:00Z',boxes:[{id:'box-'+id,name:'Caixa 01'}],items:[]});
 function app(actor,server){
- const calls=[],elements={'#app':{innerHTML:''},'#modal':{open:false,addEventListener(){},querySelector(){return null;}},'#toast':{classList:{add(){},remove(){}}},'#login-form':{},'#email':{value:actor},'#password':{value:'test-only'},'#scan-form':{},'#project':{},'#station':{},'#login-error':{}};
+ const listeners={},calls=[],elements={'#app':{innerHTML:''},'#page':{innerHTML:'',querySelector:()=>null,querySelectorAll:()=>[]},'#modal':{open:false,addEventListener(){},querySelector(){return null;}},'#toast':{classList:{add(){},remove(){}}},'#login-form':{},'#email':{value:actor},'#password':{value:'test-only'},'#scan-form':{},'#project':{},'#station':{},'#login-error':{}};
  elements['#login-form'].querySelector=()=>({});elements['#modal'].showModal=function(){this.open=true;};elements['#modal'].close=function(){this.open=false;};
  Object.assign(elements,{'#new-form':{},'#new-project':{value:'25024'},'#new-station':{value:'31133'},'#scan-code':{focus(){}}});
- const api={setSession(){},login:async()=>({user:{id:actor}}),getMembership:async()=>({full_name:'Operador '+actor,role:'operator'}),getManagers:async()=>[],getRecipients:async()=>[],listDocuments:async()=>structuredClone([...server.values()]),getDocument:async id=>{calls.push(id);return structuredClone(server.get(id));},saveDocument:async d=>{access.assertEditable(server.get(d.id),actor);server.set(d.id,structuredClone(d));return structuredClone(d);}};
+ const api={setSession(){},login:async()=>({user:{id:actor}}),getMembership:async()=>({full_name:'Operador '+actor,role:'operator'}),getManagers:async()=>[],getRecipients:async()=>[],listDocuments:async()=>{throw new Error('Bulk history load forbidden');},searchDocuments:async p=>history.searchDemo([...server.values()],p),getDocument:async id=>{calls.push(id);return structuredClone(server.get(id));},saveDocument:async d=>{access.assertEditable(server.get(d.id),actor);server.set(d.id,structuredClone(d));return structuredClone(d);}};
+ api.getDashboard=async()=>({drafts:[...server.values()].filter(d=>d.status==='draft').map(history.documentSummary),totals:history.dashboardTotals([...server.values()])});
  api.createDocument=async(project,station)=>{const next=doc('new-'+actor,actor,Math.max(...[...server.values()].map(d=>d.number))+1);Object.assign(next,{project,station});server.set(next.id,structuredClone(next));return next;};
- const context={...access,...domain,boxDetails,boxRoute,api,document:{body:{setAttribute(){},removeAttribute(){}},querySelector:s=>elements[s]||null,addEventListener(){}},window:{addEventListener(){}},location:{hash:''},clearTimeout(){},setTimeout(){},console,structuredClone};
+ const context={...history,...access,...domain,boxDetails,boxRoute,api,document:{body:{setAttribute(){},removeAttribute(){}},querySelector:s=>elements[s]||null,addEventListener:(event,fn)=>{listeners[event]=fn;}},window:{addEventListener(){}},location:{hash:''},clearTimeout(){},setTimeout(){},console,structuredClone};
  vm.runInNewContext(fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,''),context);
- return {elements,calls,context,run:code=>vm.runInNewContext(code,context),login:()=>elements['#login-form'].onsubmit({preventDefault(){},target:elements['#login-form']})};
+ return {elements,calls,context,click:async dataset=>{await listeners.click({target:{closest:()=>({dataset})}});await new Promise(resolve=>setImmediate(resolve));},run:code=>vm.runInNewContext(code,context),login:()=>elements['#login-form'].onsubmit({preventDefault(){},target:elements['#login-form']})};
 }
 
 test('B autentica sem selecionar rascunho de A; seleciona somente rascunho próprio',async()=>{
@@ -68,5 +71,16 @@ test('A e B trabalham em documentos separados; persistência de B não altera A'
  assert.equal(server.get('a').items.length,0);assert.equal(server.get('b').items.length,1);
  await A.run("getDoc().items.push({id:'a-item',code:'BMA0000001',project:getDoc().project,station:getDoc().station,qty:1,box:'box-a'});persist(getDoc())");
  assert.equal(server.get('a').items.length,1);assert.equal(server.get('b').items.length,1);
+});
+
+test('histórico integrado: login sem arrays históricos, páginas de 20, retorno preservado e indicadores globais',async()=>{
+ const server=new Map(Array.from({length:45},(_,i)=>{const d={...doc('c'+i,'A',200+i),status:'confirmed',confirmed_at:'2026-10-26T12:00:00Z',items:[{code:'BMA0013617',qty:2}]};return [d.id,d];}));
+ const client=app('B',server);await client.login();assert.equal(client.run('docs.length'),0);assert.equal(client.calls.length,0);assert.equal(client.run('globalTotals.confirmed'),45);
+ await client.click({view:'history'});assert.equal(client.run('historySearch.result.rows.length'),20);assert.equal(client.run('historySearch.result.total'),45);assert.equal(client.run('docs.length'),0);assert.equal(client.calls.length,0);
+ assert.match(client.elements['#app'].innerHTML,/data-stat="units">90/);assert.match(client.elements['#app'].innerHTML,/data-stat="confirmed">45/);
+ client.run("historySearch.filters.bma='bma0013617';historySearch.page=2");await client.run('loadHistory()');
+ await client.run("openDocument('c24')");assert.equal(client.calls.at(-1),'c24');assert.equal(client.run('docs.length'),1);
+ await client.click({view:'history'});assert.equal(client.run('historySearch.filters.bma'),'bma0013617');assert.equal(client.run('historySearch.page'),2);assert.equal(client.run('historySearch.result.rows.length'),20);assert.equal(client.run('globalTotals.units'),90);
+ await client.click({view:'overview'});assert.equal(client.run('overviewSearch.result.total'),45);assert.equal(client.run('overviewSearch.result.rows.length'),20);assert.equal(client.run('globalTotals.confirmed'),45);
 });
 
