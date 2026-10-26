@@ -23,7 +23,7 @@ export const saveDocument = doc => request('/rest/v1/rpc/save_picking','POST',{p
 export const finalizeDocument = (id,approval) => request('/rest/v1/rpc/finalize_picking','POST',{p_id:id,p_additional:approval.additional,p_exception_reason:approval.reason,p_expected:approval.fingerprint});
 export const sendManifest = id => request('/functions/v1/send-manifest','POST',{id});
 export const verifyGmail = () => request('/functions/v1/send-manifest','POST',{action:'verify'});
-export const getRecipients = () => request('/rest/v1/notification_recipients?select=role,email&order=role');
+export const getRecipients = () => request('/rest/v1/notification_recipients?select=role,email&order=role,email');
 export const saveRecipients = recipients => request('/rest/v1/rpc/set_recipients','POST',{p_recipients:recipients});
 
 export async function getMembership(userId) {
