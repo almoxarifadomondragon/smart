@@ -45,6 +45,13 @@ test('Gmail: gestor e vários adicionais vêm da cópia do servidor, com dedupli
  const r=await run({id,to:['intruso@example.com']},{doc:{email_recipients:['pcp@example.com','gestor@example.com','adicional@example.com','outro@example.com']}});
  assert.equal(r.status,200);assert.deepEqual(Array.from(r.mail.to),['pcp@example.com','gestor@example.com','adicional@example.com','outro@example.com']);
 });
+
+test('Gmail: múltiplos fixos e até 91 destinatários congelados; rejeita excesso e ignora lista do cliente',async()=>{
+ const emails=Array.from({length:91},(_,i)=>`r${i}@example.com`);
+ const r=await run({id,to:['intruso@example.com']},{doc:{email_recipients:emails}});assert.equal(r.status,200);assert.deepEqual(Array.from(r.mail.to),emails);assert.equal(r.patch.email_status,'sent');
+ const tooMany=await run({id},{doc:{email_recipients:[...emails,'overflow@example.com']}});assert.equal(tooMany.status,409);assert.equal(tooMany.mail,undefined);
+ const six=['p1@example.com','p2@example.com','a1@example.com','a2@example.com','gestor@example.com','extra@example.com'];assert.deepEqual(Array.from((await run({id},{doc:{email_recipients:six}})).mail.to),six);
+});
 test('Gmail: trava impede segunda chamada e falha parcial ou timeout exige reconciliação',async()=>{
  const blocked=await run({id},{blocked:true});assert.equal(blocked.status,409);assert.equal(blocked.mail,undefined);
  const partial=await run({id},{rejected:['a@example.com']});assert.equal(partial.status,502);assert.equal(partial.patch.email_status,'uncertain');

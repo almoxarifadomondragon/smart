@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeEmails,normalizeProject,settingsView} from '../public/administration.js';
+import {normalizeEmails,normalizeProject,settingsView,normalizeFixedRecipients,EFFECTIVE_RECIPIENT_LIMIT} from '../public/administration.js';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {stripTypeScriptTypes} from 'node:module';
@@ -11,6 +11,24 @@ test('projetos: correspondência exata normalizada mantém zeros à esquerda',()
 test('destinatários: valida e remove duplicidades sem distinguir maiúsculas',()=>{
  assert.deepEqual(normalizeEmails([' A@EXAMPLE.COM ','a@example.com','b@example.com']),['a@example.com','b@example.com']);
  for(const values of [[''],['a@@example.com'],['x y@example.com'],Array.from({length:31},(_,i)=>`${i}@example.com`)])assert.throws(()=>normalizeEmails(values));
+});
+
+test('fixos múltiplos: duas áreas, terceiro, edição e remoção sem duplicatas locais',()=>{
+ const initial=[{role:'PCP',email:' P1@EXAMPLE.COM '},{role:'PCP',email:'p2@example.com'},{role:'Almoxarifado',email:'a1@example.com'},{role:'Almoxarifado',email:'a2@example.com'}];
+ assert.equal(normalizeFixedRecipients(initial).length,4);
+ const third=normalizeFixedRecipients([...initial,{role:'PCP',email:'p3@example.com'}]);assert.equal(third.length,5);assert.equal(third[0].email,'p1@example.com');
+ const edited=third.map(r=>r.email==='p2@example.com'?{...r,email:'new@example.com'}:r);assert.ok(normalizeFixedRecipients(edited).some(r=>r.email==='new@example.com'));
+ assert.equal(normalizeFixedRecipients(edited.filter(r=>r.email!=='p3@example.com')).length,4);
+ for(const bad of [initial.filter(r=>r.role==='PCP'),[...initial,{role:'PCP',email:'p1@example.com'}],initial.map((r,i)=>i? r:{...r,email:'bad'}),initial.map((r,i)=>i? r:{...r,email:''}),[...initial,{role:'Gestor',email:'g@example.com'}]])assert.throws(()=>normalizeFixedRecipients(bad));
+ const both=normalizeFixedRecipients([{role:'PCP',email:'same@example.com'},{role:'Almoxarifado',email:' SAME@EXAMPLE.COM '}]);assert.equal(both.length,2);assert.equal(normalizeEmails(both.map(r=>r.email)).length,1);
+ const maximum=['PCP','Almoxarifado'].flatMap(role=>Array.from({length:30},(_,i)=>({role,email:`${role.toLowerCase()}${i}@example.com`})));assert.equal(normalizeFixedRecipients(maximum).length,60);
+ assert.throws(()=>normalizeFixedRecipients([...maximum,{role:'PCP',email:'overflow@example.com'}]));assert.equal(EFFECTIVE_RECIPIENT_LIMIT,91);
+});
+
+test('fixos múltiplos: cada endereço tem campo e controles são exclusivos do administrador',()=>{
+ const recipients=[{role:'PCP',email:'p1@example.com'},{role:'PCP',email:'p2@example.com'},{role:'Almoxarifado',email:'a1@example.com'},{role:'Almoxarifado',email:'a2@example.com'}];
+ const admin=settingsView({admin:true,demo:true,recipients,managers:[]});assert.equal((admin.match(/data-fixed-email=/g)||[]).length,4);assert.equal((admin.match(/data-fixed-add=/g)||[]).length,2);assert.equal((admin.match(/data-fixed-remove=/g)||[]).length,4);
+ const operator=settingsView({admin:false,demo:false,recipients,managers:[]});for(const r of recipients)assert.ok(operator.includes(r.email));assert.ok(!operator.includes('data-fixed-add='));assert.ok(!operator.includes('data-fixed-remove='));assert.ok(!operator.includes('Salvar destinatários'));assert.equal((operator.match(/required readonly/g)||[]).length,4);
 });
 test('usuários e controles administrativos são invisíveis ao operador; entradas são escapadas',()=>{
  const ctx={admin:false,demo:false,recipients:[],managers:[{id:'id',project_code:'<script>',email:'a@example.com',active:true}]};

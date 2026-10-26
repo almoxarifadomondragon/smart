@@ -24,6 +24,13 @@ function harness(){
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const snapshot=(fingerprint,emails=[])=>({fingerprint,emails,roles:[]});
 
+test('conferência demonstração lista todos os fixos, gestor e adicionais sem duplicar entre áreas',async()=>{
+ const h=harness();h.ctx.demo=true;h.ctx.recipients=[{role:'PCP',email:'p1@example.com'},{role:'PCP',email:'p2@example.com'},{role:'Almoxarifado',email:'a1@example.com'},{role:'Almoxarifado',email:'a2@example.com'}];h.ctx.managers=[{project_code:'P',active:true,email:'g@example.com'}];
+ await h.start();for(const r of h.ctx.recipients)assert.ok(h.page.panel.html.includes(r.email));assert.equal(h.approval().emails.length,5);
+ h.page.panel.querySelector('[data-add-recipient]').onclick();h.page.panel.inputs[0].value='extra@example.com';await h.page.panel.querySelector('[data-check-recipients]').onclick();assert.equal(h.approval().emails.length,6);
+ h.ctx.recipients.push({role:'Almoxarifado',email:'p1@example.com'});await h.start();assert.equal(h.approval().emails.length,6);
+});
+
 test('uma resposta antiga não aprova dados editados durante a conferência',async()=>{
  const h=harness(),initial=h.start();
  h.page.panel.querySelector('[data-add-recipient]').onclick();
