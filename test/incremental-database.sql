@@ -1,11 +1,18 @@
 -- Homologação transacional no projeto oficial. Não envia e-mails nem cria usuários Auth.
 begin;
 select set_config('request.jwt.claim.sub',(select user_id::text from public.app_members where role='admin' and active order by full_name limit 1),true);
+with legacy as (
+ insert into public.picking_documents(owner_id,responsible,project,station,status,confirmed_at,email_recipients)
+ values(auth.uid(),'Legado de homologação','LEGADO','1','confirmed',now(),'["pcp-legado@example.com","gestor-legado@example.com","almox-legado@example.com"]') returning id
+) select set_config('test.legacy_document',id::text,true) from legacy;
 set local role authenticated;
 do $$
 declare d public.picking_documents; m public.project_managers; snap jsonb; frozen jsonb; claim jsonb; other_claim jsonb;
  rejected boolean; who uuid:=auth.uid(); request jsonb;
 begin
+ d:=public.finalize_picking(current_setting('test.legacy_document')::uuid);
+ if d.recipient_snapshot is not null or d.email_recipients<>'["pcp-legado@example.com","gestor-legado@example.com","almox-legado@example.com"]'::jsonb then raise exception 'Romaneio legado perdeu destinatários';end if;
+ if public.preview_recipients(d.id)->>'frozen'<>'true' then raise exception 'Legado não congelado';end if;
  m:=public.save_project_manager(null,' 000TESTE-A ','GESTOR-A@example.com',true);
  if m.project_code<>'000TESTE-A' or m.email<>'gestor-a@example.com' then raise exception 'Normalização de projeto/e-mail incorreta'; end if;
  rejected:=false;
@@ -94,5 +101,12 @@ begin
  if not rejected then raise exception 'Inativo criou separação';end if;
 end $$;
 reset role;
+do $$
+begin
+ if exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','smart_private') and c.relkind='r' and not c.relrowsecurity) then raise exception 'Tabela sem RLS';end if;
+ if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and has_function_privilege('anon',p.oid,'EXECUTE')) then raise exception 'RPC acessível a anon';end if;
+ if has_function_privilege('authenticated','public.complete_user_invite(uuid,uuid)','EXECUTE')
+ or has_function_privilege('authenticated','public.finish_manifest_email(uuid,uuid,text,text,text)','EXECUTE') then raise exception 'RPC interna acessível ao frontend';end if;
+end $$;
 select 'PASSOU: gestores, snapshots, adicionais, bloqueios, concorrência, falha parcial, reconciliação, convites e último admin' as resultado;
 rollback;
