@@ -19,7 +19,11 @@ export const getDashboard = () => request('/rest/v1/rpc/get_picking_dashboard','
 export const searchDocuments = parameters => request('/rest/v1/rpc/search_picking_documents','POST',parameters);
 export async function getDocument(id){const rows=await request('/rest/v1/picking_documents?select=*&id=eq.'+encodeURIComponent(id));if(!rows?.length)throw new Error('Separação não encontrada ou sem permissão de consulta.');return rows[0];}
 export const createDocument = (project,station) => request('/rest/v1/rpc/create_picking','POST',{p_project:project,p_station:station});
-export const saveDocument = doc => request('/rest/v1/rpc/save_picking','POST',{p_id:doc.id,p_project:doc.project,p_station:doc.station,p_boxes:doc.boxes,p_items:doc.items});
+export const saveDocument = doc => request('/rest/v1/rpc/save_picking_versioned','POST',{p_id:doc.id,p_project:doc.project,p_station:doc.station,p_boxes:doc.boxes,p_items:doc.items,p_revision:doc.revision??0});
+export const listPhysicalBoxes = (project,station,search='') => request('/rest/v1/rpc/list_physical_boxes','POST',{p_project:project,p_station:station,p_search:search});
+export const createPhysicalBox = (documentId,id,name) => request('/rest/v1/rpc/create_physical_box','POST',{p_document:documentId,p_id:id,p_name:name});
+export const getPhysicalBox = id => request('/rest/v1/rpc/get_physical_box','POST',{p_id:id});
+export const closePhysicalBox = id => request('/rest/v1/rpc/close_physical_box','POST',{p_id:id});
 export const finalizeDocument = (id,approval) => request('/rest/v1/rpc/finalize_picking','POST',{p_id:id,p_additional:approval.additional,p_exception_reason:approval.reason,p_expected:approval.fingerprint});
 export const sendManifest = id => request('/functions/v1/send-manifest','POST',{id});
 export const verifyGmail = () => request('/functions/v1/send-manifest','POST',{action:'verify'});
