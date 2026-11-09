@@ -1,4 +1,14 @@
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function physicalBoxLink(base,id,demo=false){
+ if(!uuid.test(id))throw new Error('Identificação da caixa física inválida.');
+ const url=new URL(base);if(!['http:','https:'].includes(url.protocol))throw new Error('Endereço inválido.');
+ url.search='';url.hash=new URLSearchParams({caixa_fisica:id,...(demo?{demo:'1'}:{})}).toString();
+ return url.href;
+}
+export function physicalBoxRoute(hash){
+ const params=new URLSearchParams(hash.replace(/^#/,'')),id=params.get('caixa_fisica');
+ return uuid.test(id||'')?{id,demo:params.get('demo')==='1'}:null;
+}
 export function boxLink(base,documentId,boxId,demo=false){
  if(!uuid.test(documentId)||!uuid.test(boxId))throw new Error('Identificação da caixa inválida.');
  const url=new URL(base);if(!['http:','https:'].includes(url.protocol))throw new Error('Endereço inválido.');

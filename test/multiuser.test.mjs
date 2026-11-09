@@ -6,7 +6,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import * as access from '../public/picking-access.js';
 import * as domain from '../public/domain.js';
-import {boxDetails,boxRoute} from '../public/labels.js';
+import * as warehouse from '../public/warehouse.js';
+import {boxDetails,boxRoute,physicalBoxRoute} from '../public/labels.js';
 const doc=(id,owner,number)=>({id,owner_id:owner,number,status:'draft',project:'25024',station:'31133',responsible:'Operador '+owner,created_at:'2026-10-26T12:00:00Z',boxes:[{id:'box-'+id,name:'Caixa 01'}],items:[]});
 function app(actor,server){
  const listeners={},calls=[],elements={'#app':{innerHTML:''},'#page':{innerHTML:'',querySelector:()=>null,querySelectorAll:()=>[]},'#modal':{open:false,addEventListener(){},querySelector(){return null;}},'#toast':{classList:{add(){},remove(){}}},'#login-form':{},'#email':{value:actor},'#password':{value:'test-only'},'#scan-form':{},'#project':{},'#station':{},'#login-error':{}};
@@ -15,7 +16,7 @@ function app(actor,server){
  const api={setSession(){},login:async()=>({user:{id:actor}}),getMembership:async()=>({full_name:'Operador '+actor,role:'operator'}),getManagers:async()=>[],getRecipients:async()=>[],listDocuments:async()=>{throw new Error('Bulk history load forbidden');},searchDocuments:async p=>history.searchDemo([...server.values()],p),getDocument:async id=>{calls.push(id);return structuredClone(server.get(id));},saveDocument:async d=>{access.assertEditable(server.get(d.id),actor);server.set(d.id,structuredClone(d));return structuredClone(d);}};
  api.getDashboard=async()=>({drafts:[...server.values()].filter(d=>d.status==='draft').map(history.documentSummary),totals:history.dashboardTotals([...server.values()])});
  api.createDocument=async(project,station)=>{const next=doc('new-'+actor,actor,Math.max(...[...server.values()].map(d=>d.number))+1);Object.assign(next,{project,station});server.set(next.id,structuredClone(next));return next;};
- const context={...history,...access,...domain,boxDetails,boxRoute,api,document:{body:{setAttribute(){},removeAttribute(){}},querySelector:s=>elements[s]||null,addEventListener:(event,fn)=>{listeners[event]=fn;}},window:{addEventListener(){}},location:{hash:''},clearTimeout(){},setTimeout(){},console,structuredClone};
+ const context={...history,...access,...domain,...warehouse,boxDetails,boxRoute,physicalBoxRoute,api,document:{body:{setAttribute(){},removeAttribute(){}},querySelector:s=>elements[s]||null,addEventListener:(event,fn)=>{listeners[event]=fn;}},window:{history:{replaceState(){}},addEventListener(){}},location:{hash:'',pathname:'/smart/',search:''},clearTimeout(){},setTimeout(){},console,structuredClone};
  vm.runInNewContext(fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,''),context);
  return {elements,calls,context,click:async dataset=>{await listeners.click({target:{closest:()=>({dataset})}});await new Promise(resolve=>setImmediate(resolve));},run:code=>vm.runInNewContext(code,context),login:()=>elements['#login-form'].onsubmit({preventDefault(){},target:elements['#login-form']})};
 }
@@ -38,9 +39,10 @@ test('B consulta A somente para leitura: caixas/peças presentes e nenhuma muta�
 
 test('B inicia nova separação independente mesmo com A em andamento',async()=>{
  const a=doc('a','A',170),server=new Map([['a',a]]),client=app('B',server);await client.login();
- client.run("newModal();document.querySelector('#new-form').onsubmit({preventDefault(){}})");
- await new Promise(resolve=>setImmediate(resolve));
+ await Promise.all([client.click({action:'new'}),client.click({action:'new'})]);
  assert.equal(client.run('getDoc().owner_id'),'B');assert.equal(client.run('getDoc().number'),171);assert.notEqual(client.run('current'),'a');assert.deepEqual(server.get('a'),a);
+ assert.equal(client.run('getDoc().project'),'');assert.equal(client.run('getDoc().station'),'');assert.equal(client.run('docs.length'),2);
+ assert.equal(server.size,2);assert.equal(client.elements['#modal'].open,false);
 });
 
 test('abrir novamente busca o servidor e confirmação remota bloqueia novas operações',async()=>{
