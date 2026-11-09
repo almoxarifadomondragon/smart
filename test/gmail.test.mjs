@@ -57,3 +57,14 @@ test('Gmail: trava impede segunda chamada e falha parcial ou timeout exige recon
  const partial=await run({id},{rejected:['a@example.com']});assert.equal(partial.status,502);assert.equal(partial.patch.email_status,'uncertain');
  const uncertain=await run({id},{smtpError:{code:'ETIMEDOUT'}});assert.equal(uncertain.status,502);assert.equal(uncertain.patch.email_status,'uncertain');
 });
+
+test('Gmail: Nota Fiscal por item preserva zeros, escapa texto e aceita documentos antigos',async()=>{
+ const boxes=[{id:'volume',name:'Caixa 01'}];
+ const item={code:'BMA0013539',project:'P',station:'E',qty:1,box:'volume',scanned_at:'2026-11-09T12:00:00Z',operator:'Operador'};
+ const r=await run({id},{doc:{boxes,items:[{...item,invoice_number:'00019/A'},{...item,invoice_number:'<NF>'},item]}});
+ assert.equal(r.status,200);
+ assert.match(r.mail.html,/<th>Nota Fiscal<\/th>/);
+ assert.match(r.mail.html,/<td>00019\/A<\/td>/);
+ assert.match(r.mail.html,/<td>&lt;NF&gt;<\/td>/);
+ assert.match(r.mail.html,/<td>—<\/td>/);
+});
