@@ -136,14 +136,31 @@ function showLabel(doc,id){
 async function passwordLink(){
  const hash=new URLSearchParams(location.hash.slice(1)),query=new URLSearchParams(location.search||'');
  const type=hash.get('type')||query.get('type');
- if(!['invite','recovery'].includes(type))return false;
+ const errorCode=hash.get('error_code')||query.get('error_code');
+ const linkError='Link de acesso inválido, expirado ou já utilizado. Solicite um novo link ao administrador.';
+ const clearLink=()=>window.history.replaceState(null,'',location.pathname);
+ if(errorCode==='otp_expired'||(['invite','recovery'].includes(type)&&(hash.has('error')||query.has('error')))){
+  clearLink();loginView();$('#login-error').textContent=linkError;return;
+ }
+ if(!['invite','recovery'].includes(type)){loginView();return;}
+ const fragmentToken=type==='recovery'?hash.get('token_hash'):null;
+ const tokenHash=fragmentToken||query.get('token_hash');
+ // Remove recovery credentials from the address before any user interaction.
+ clearLink();
+ const openSetup=async()=>{
  try{
-  const session=query.get('token_hash')?await api.verifyPasswordLink(query.get('token_hash'),type):{access_token:hash.get('access_token'),refresh_token:hash.get('refresh_token'),expires_at:Math.floor(Date.now()/1000)+Number(hash.get('expires_in')||3600)};
-  api.setSession(session);await api.authUser();window.history.replaceState(null,'',location.pathname);
+  const session=tokenHash?await api.verifyPasswordLink(tokenHash,type):{access_token:hash.get('access_token'),refresh_token:hash.get('refresh_token'),expires_at:Math.floor(Date.now()/1000)+Number(hash.get('expires_in')||3600)};
+  if(!session?.access_token)throw new Error(linkError);
+  api.setSession(session);await api.authUser();
   $('#app').innerHTML='<div class="login-form"><div class="login-inner"><h2>Definir sua senha</h2><form id="password-setup">'+field('Nova senha','new-password','','type="password" autocomplete="new-password" required minlength="12"')+field('Repita a senha','repeat-password','','type="password" autocomplete="new-password" required minlength="12"')+'<p id="setup-error" class="error"></p><button class="primary">Salvar senha</button></form></div></div>';
   $('#password-setup').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{if($('#new-password').value!==$('#repeat-password').value)throw new Error('As senhas devem ser iguais.');await api.setPassword($('#new-password').value);await api.logout();api.setSession(null);loginView();toast('Senha definida. Entre com seu e-mail e senha.');}catch(error){$('#setup-error').textContent=error.message;}finally{button.disabled=false;}};
- }catch(error){api.setSession(null);window.history.replaceState(null,'',location.pathname);loginView();$('#login-error').textContent='Convite inválido ou expirado. Solicite um novo convite ao administrador.';}
- return true;
+ }catch(error){api.setSession(null);loginView();$('#login-error').textContent=linkError;}
+ };
+ if(fragmentToken){
+  // A mail scanner can load the page without consuming the one-time token.
+  $('#app').innerHTML='<div class="login-form"><div class="login-inner"><h2>Recuperar senha</h2><p>Continue para validar o link e definir sua nova senha.</p><button class="primary" id="continue-password" type="button">Continuar para definir senha</button></div></div>';
+  $('#continue-password').onclick=async e=>{e.currentTarget.disabled=true;await openSetup();};
+ }else await openSetup();
 }
-if(!/[?&#]type=(invite|recovery)(?:&|$)/.test(location.hash+(location.search||'')))loginView();else passwordLink();
+if(/[?&#](?:type=(?:invite|recovery)|error_code=otp_expired)(?:&|$)/.test(location.hash+(location.search||'')))passwordLink();else loginView();
 
