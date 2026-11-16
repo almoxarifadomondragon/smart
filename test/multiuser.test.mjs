@@ -1,3 +1,4 @@
+import * as boxes from '../public/box-search.js';
 import * as history from '../public/history.js';
 // The history test also exercises the real application navigation and cache.
 import test from 'node:test';
@@ -7,16 +8,16 @@ import vm from 'node:vm';
 import * as access from '../public/picking-access.js';
 import * as domain from '../public/domain.js';
 import * as warehouse from '../public/warehouse.js';
-import {boxDetails,boxRoute,physicalBoxRoute} from '../public/labels.js';
+import {boxDetails,boxRoute,physicalBoxRoute,physicalBoxLink} from '../public/labels.js';
 const doc=(id,owner,number)=>({id,owner_id:owner,number,status:'draft',project:'25024',station:'31133',responsible:'Operador '+owner,created_at:'2026-10-26T12:00:00Z',boxes:[{id:'box-'+id,name:'Caixa 01'}],items:[]});
 function app(actor,server){
- const listeners={},calls=[],elements={'#app':{innerHTML:''},'#page':{innerHTML:'',querySelector:()=>null,querySelectorAll:()=>[]},'#modal':{open:false,addEventListener(){},querySelector(){return null;}},'#toast':{classList:{add(){},remove(){}}},'#login-form':{},'#email':{value:actor},'#password':{value:'test-only'},'#scan-form':{},'#project':{},'#station':{},'#login-error':{}};
+ const listeners={},calls=[],elements={'#app':{innerHTML:''},'#page':{innerHTML:'',querySelector:selector=>selector==='#box-search-filters'?{}:null,querySelectorAll:()=>[]},'#modal':{open:false,addEventListener(){},querySelector(){return null;}},'#toast':{classList:{add(){},remove(){}}},'#login-form':{},'#email':{value:actor},'#password':{value:'test-only'},'#scan-form':{},'#project':{},'#station':{},'#login-error':{}};
  elements['#login-form'].querySelector=()=>({});elements['#modal'].showModal=function(){this.open=true;};elements['#modal'].close=function(){this.open=false;};
  Object.assign(elements,{'#new-form':{},'#new-project':{value:'25024'},'#new-station':{value:'31133'},'#scan-code':{focus(){}}});
  const api={setSession(){},login:async()=>({user:{id:actor}}),getMembership:async()=>({full_name:'Operador '+actor,role:'operator'}),getManagers:async()=>[],getRecipients:async()=>[],listDocuments:async()=>{throw new Error('Bulk history load forbidden');},searchDocuments:async p=>history.searchDemo([...server.values()],p),getDocument:async id=>{calls.push(id);return structuredClone(server.get(id));},saveDocument:async d=>{access.assertEditable(server.get(d.id),actor);server.set(d.id,structuredClone(d));return structuredClone(d);}};
  api.getDashboard=async()=>({drafts:[...server.values()].filter(d=>d.status==='draft').map(history.documentSummary),totals:history.dashboardTotals([...server.values()])});
  api.createDocument=async(project,station)=>{const next=doc('new-'+actor,actor,Math.max(...[...server.values()].map(d=>d.number))+1);Object.assign(next,{project,station});server.set(next.id,structuredClone(next));return next;};
- const context={...history,...access,...domain,...warehouse,boxDetails,boxRoute,physicalBoxRoute,api,document:{body:{setAttribute(){},removeAttribute(){}},querySelector:s=>elements[s]||null,addEventListener:(event,fn)=>{listeners[event]=fn;}},window:{history:{replaceState(){}},addEventListener(){}},location:{hash:'',pathname:'/smart/',search:''},clearTimeout(){},setTimeout(){},console,structuredClone};
+ const context={...boxes,...history,...access,...domain,...warehouse,boxDetails,boxRoute,physicalBoxRoute,physicalBoxLink,api,document:{body:{setAttribute(){},removeAttribute(){}},querySelector:s=>elements[s]||null,addEventListener:(event,fn)=>{listeners[event]=fn;}},window:{history:{replaceState(){}},addEventListener(){}},location:{hash:'',pathname:'/smart/',search:''},clearTimeout(){},setTimeout(){},console,structuredClone};
  vm.runInNewContext(fs.readFileSync(new URL('../public/app.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,''),context);
  return {elements,calls,context,click:async dataset=>{await listeners.click({target:{closest:()=>({dataset})}});await new Promise(resolve=>setImmediate(resolve));},run:code=>vm.runInNewContext(code,context),login:()=>elements['#login-form'].onsubmit({preventDefault(){},target:elements['#login-form']})};
 }
@@ -86,3 +87,23 @@ test('histórico integrado: login sem arrays históricos, páginas de 20, retorn
  await client.click({view:'overview'});assert.equal(client.run('overviewSearch.result.total'),45);assert.equal(client.run('overviewSearch.result.rows.length'),20);assert.equal(client.run('globalTotals.confirmed'),45);
 });
 
+test('Menu Caixas Físicas volta da consulta com os filtros e a página aplicada',async()=>{
+ const client=app('A',new Map());
+ const id='abc00000-0000-4000-8000-000000000001';
+ const box={id,code:'CX-000008',name:'Estoque',status:'available',project:'0004567',station:'0001',created_at:'2026-11-16T02:30:00Z'};
+ const calls=[];
+ client.context.location.href='https://test.invalid/smart/';
+ client.context.api.searchPhysicalBoxes=async p=>{calls.push(p);return {rows:[],total:23,page:p.p_page,indicators:{}};};
+ client.context.api.getPhysicalBox=async()=>({box,documents:[],items:[],total_units:0});
+ await client.login();
+ assert.match(client.elements['#app'].innerHTML,/data-view="boxes"[^>]*>.*?Caixas Físicas/);
+ await client.click({view:'boxes'});
+ client.run("boxSearch.filters.project='0004567';boxSearch.applied={...boxSearch.filters};boxSearch.page=2;");
+ await client.run('loadBoxSearch()');
+ await client.click({action:'physical-view',id});
+ assert.match(client.elements['#app'].innerHTML,/Voltar para Caixas Físicas/);
+ await client.click({action:'physical-back'});
+ assert.equal(calls.at(-1).p_project,'0004567');
+ assert.equal(calls.at(-1).p_page,2);
+ assert.match(client.elements['#page'].innerHTML,/Página 2 de 2/);
+});

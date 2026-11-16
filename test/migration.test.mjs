@@ -1,3 +1,4 @@
+import * as boxes from '../public/box-search.js';
 import * as history from '../public/history.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -32,6 +33,7 @@ test('migração: caixa de rascunho abre sem tentar vincular formulário ausente
  const elements={'#login-form':{},'#demo-login':{},'#app':{innerHTML:''},'#modal':{addEventListener(){}},'#toast':{classList:{add(){},remove(){}}}};
  const context={...history,document:{querySelector:key=>elements[key]||null,addEventListener(){}},window:{addEventListener(){}},location:{hash:''},clearTimeout(){},setTimeout(){},console,boxDetails:()=>({number:'01/01',box:{name:'Caixa 01'},items:[],project:'25024',station:'31133'}),totalQty:()=>0,formatQty:()=> '0,00',pad:n=>String(n).padStart(6,'0')};
  context.ownsPicking=ownsPicking;
+ Object.assign(context,boxes);
  vm.runInNewContext(read('public/app.js').replace(/^import .*;\r?\n/gm,''),context);
  vm.runInNewContext("user={id:'operator'};membership={full_name:'Nome autorizado',role:'operator'};docs=[{id:'doc',number:147,status:'draft',boxes:[{id:'box',name:'Caixa 01'}],items:[],responsible:'Nome autorizado'}];current='doc';selectedBox='box';render();",context);
  assert.match(elements['#app'].innerHTML,/Conteúdo desta caixa/);

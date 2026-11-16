@@ -83,13 +83,15 @@ export function physicalContentsView(result,{compact=false,receipt=false}={}){
 const deliveryDate = value => value ? new Date(value).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : '—';
 const emailStates = {pending:'Aguardando envio',sending:'Em envio',sent:'Aceito pelo Gmail',failed:'Falha no envio',uncertain:'Resultado incerto'};
 
+export const deliveryEmailLabel = state => emailStates[state];
+
 export function deliveryStatusView(delivery,{admin=false}={}){
  if(!delivery)return '<p class="notice">Caixa fechada. O fechamento histórico não possui comprovante de entrega.</p>';
  const {email_state:state,snapshot}=delivery;
  return '<section class="card"><div class="card-body"><h2>Caixa fechada — Entrega registrada</h2>'+
   '<p>'+esc(delivery.closed_by_name)+' · '+esc(deliveryDate(delivery.closed_at))+'</p>'+
   '<p>'+snapshot.documents.length+' romaneio(s) · '+snapshot.items.length+' registros BMA · '+formatQty(snapshot.total_units)+' unidades</p>'+
-  (state?'<p>E-mail: <strong>'+esc(emailStates[state])+'</strong></p>':'')+
+  (state?'<p>E-mail: <strong>'+esc(deliveryEmailLabel(state))+'</strong></p>':'')+
   '<div class="actions"><button data-action="physical-receipt">Comprovante de entrega</button>'+
   (state?'<button data-action="physical-refresh">Atualizar estado do e-mail</button>':'')+
   (['pending','failed'].includes(state)?'<button data-action="physical-send">'+(state==='failed'?'Reenviar e-mail':'Enviar e-mail')+'</button>':'')+
