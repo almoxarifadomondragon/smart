@@ -24,13 +24,15 @@ export function validateDestinationSave(previous,next){
  }
  return assertUniformDestination(next);
 }
-export function parseQuantity(raw) {
+function readQuantity(raw, allowZero) {
   const text = String(raw ?? '').trim();
   if (!/^\d+(?:[.,]\d{1,2})?$/.test(text)) throw new Error('Informe uma quantidade positiva com até 2 casas decimais. Ex.: 1,00.');
   const value = Number(text.replace(',','.'));
-  if (!Number.isFinite(value) || value <= 0 || value > 999999) throw new Error('A quantidade deve ser maior que zero e no máximo 999999.');
+  if (!Number.isFinite(value) || (!allowZero && value === 0) || value > 999999) throw new Error('A quantidade deve ser maior que zero e no máximo 999999.');
   return value;
 }
+export const parseQuantity = raw => readQuantity(raw, false);
+const parseQrQuantity = raw => readQuantity(raw, true);
 export const formatQty = value => Number(value).toLocaleString('pt-BR',{useGrouping:false,minimumFractionDigits:2,maximumFractionDigits:2});
 export const totalQty = items => items.reduce((sum,item)=>sum+Math.round(item.qty*100),0)/100;
 export function manifestCsv(doc) {
@@ -56,7 +58,7 @@ export function parseQR(raw) {
     const [qr_prefix,rawCode,project,station,rawQty,purchase_order,purchase_order_item] = parts;
     if (qr_prefix.length>80 || project.length>120 || station.length>120) throw new Error('QR contém campos muito longos.');
     validatePurchase(purchase_order,purchase_order_item);
-    return {code:parseCode(rawCode),project,station,qty:parseQuantity(rawQty),purchase_order,purchase_order_item,qr_prefix};
+    return {code:parseCode(rawCode),project,station,qty:parseQrQuantity(rawQty),purchase_order,purchase_order_item,qr_prefix};
   }
   let values;
   try { values = JSON.parse(text); } catch {
@@ -71,7 +73,7 @@ export function parseQR(raw) {
   const code = parseCode(String(values.bma ?? values.codigo ?? values['código'] ?? values.code ?? ''));
   const project = String(values.projeto ?? values.project ?? '').trim();
   const station = String(values['estação'] ?? values.estacao ?? values.station ?? '').trim();
-  const qty = parseQuantity(values.quantidade ?? values.qty ?? 1);
+  const qty = parseQrQuantity(values.quantidade ?? values.qty ?? 1);
   const purchase_order = String(values.purchase_order ?? values.pedido ?? '').trim();
   const purchase_order_item = String(values.purchase_order_item ?? values.item_pedido ?? '').trim();
   validatePurchase(purchase_order,purchase_order_item);

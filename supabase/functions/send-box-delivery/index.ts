@@ -39,14 +39,17 @@ Deno.serve(async req => {
   const user = await auth.json();
   const body = await req.json().catch(() => null);
   const id = body?.id;
-  if (!body || Object.keys(body).length !== 1 || typeof id !== 'string' ||
-      !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) {
-   return respond({message:'Informe somente o ID da caixa.'},400);
+  const uuid = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+  const validId = (value: unknown) => typeof value === 'string' && uuid.test(value);
+  const resend = body && Object.keys(body).length === 3 && validId(body.requestId) && validId(body.expectedAttempt);
+  if (!validId(id) || (!resend && Object.keys(body).length !== 1)) {
+   return respond({message:'Informe o ID da caixa e, para reenvio, a confirmação da tentativa anterior.'},400);
   }
-  const claimResponse = await rpc('claim_box_delivery_email',{p_id:id,p_actor:user.id});
+  const claimResponse = await rpc('claim_box_delivery_email',{p_id:id,p_actor:user.id,
+   ...(resend?{p_request:body.requestId,p_expected_attempt:body.expectedAttempt}:{})});
   if (!claimResponse.ok) {
    const error = await claimResponse.json().catch(() => ({}));
-   return respond({message:'Entrega indisponível ou usuário sem permissão.'},error.code==='42501'?403:409);
+   return respond({message:error.code==='P4091'?'O envio mudou. Atualize a consulta e confirme novamente.':'Entrega indisponível ou usuário sem permissão.'},error.code==='42501'?403:409);
   }
   const claim = await claimResponse.json();
   if (!claim.token) return respond({state:claim.state});
@@ -63,7 +66,7 @@ Deno.serve(async req => {
    await finish('failed',null,'missing_configuration');
    return respond({state:'failed',message:'O Gmail não está configurado.'},503);
   }
-  const {snapshot,recipient_snapshot,closed_at,closed_by_name} = claim.delivery;
+  const {snapshot,recipient_snapshot,closed_at,closed_by_name,observations} = claim.delivery;
   const {box,documents,items,total_units} = snapshot;
   const documentsTable = table(['Romaneio','Responsável','Confirmação','Registros BMA','Unidades'],
    documents.map((doc: any) => [manifest(doc.number),doc.responsible,date(doc.confirmed_at),doc.item_count,number(doc.total_units)]));
@@ -71,14 +74,16 @@ Deno.serve(async req => {
    items.map((item: any) => [item.code,number(item.qty),item.invoice_number||'—',item.purchase_order||'—',
     item.purchase_order_item||'—',manifest(item.document_number),date(item.scanned_at),item.operator]));
   const link = origin + '/smart/#caixa_fisica=' + encodeURIComponent(id);
+  const copyNotice = claim.is_copy ? '<p>Este e-mail é uma nova cópia do comprovante de entrega registrado anteriormente.</p>' : '';
+  const notes = observations ? '<h2>Observações da entrega</h2><p style="white-space:pre-wrap">'+escape(observations).replace(/\n/g,'<br>')+'</p>' : '';
   const html = '<div style="font-family:Arial,sans-serif;color:#282d36">' +
    '<img width="180" src="'+origin+'/smart/logo.png" alt="Mondragon Assembly">' +
-   '<h1 style="color:#cc2631">Confirmação de entrega de caixa à Produção</h1>' +
+   '<h1 style="color:#cc2631">Confirmação de entrega de caixa à Produção</h1>' + copyNotice +
    '<p>'+escape(box.code)+' · '+escape(box.name)+'<br>Projeto '+escape(box.project)+' · Estação '+escape(box.station)+
-   '<br>Entrega declarada por '+escape(closed_by_name)+' em '+escape(date(closed_at))+'</p>' +
+   '<br>Entrega declarada por '+escape(closed_by_name)+'<br>Data/hora original da entrega: '+escape(date(closed_at))+'</p>' +
    '<h2>Romaneios vinculados ('+documents.length+')</h2>'+documentsTable+
    '<h2>Materiais</h2>'+itemsTable+'<p>'+items.length+' registros BMA · '+number(total_units)+' unidades</p>'+
-   '<p><a href="'+escape(link)+'">Consultar caixa física '+escape(box.code)+'</a></p></div>';
+   notes+'<p><a href="'+escape(link)+'">Consultar caixa física '+escape(box.code)+'</a></p></div>';
   const transport = nodemailer.createTransport({
    host:'smtp.gmail.com',port:465,secure:true,auth:{user:sender,pass},
    tls:{minVersion:'TLSv1.2',rejectUnauthorized:true},
@@ -90,8 +95,8 @@ Deno.serve(async req => {
    info = await transport.sendMail({
     from:{name:'Mondragon',address:sender},
     to:recipient_snapshot.emails.map((address: string) => ({address,name:''})),
-    subject:'MONDRAGON | CAIXA ENTREGUE À PRODUÇÃO | '+box.code+' | Projeto '+box.project+' | Estação '+box.station,
-    html,messageId:'<caixa-entrega-'+id+'@gmail.com>'
+    subject:'MONDRAGON | '+(claim.is_copy?'REENVIO DO COMPROVANTE DE ENTREGA':'CAIXA ENTREGUE À PRODUÇÃO')+' | '+box.code+' | Projeto '+box.project+' | Estação '+box.station,
+    html,messageId:'<caixa-entrega-'+id+'-'+claim.token+'@gmail.com>'
    });
   } catch (error) {
    const rejectedAuth = (error as {code?:string})?.code === 'EAUTH';

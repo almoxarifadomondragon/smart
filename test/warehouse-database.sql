@@ -29,6 +29,12 @@ begin
  if not rejected or (select project<>'' or station<>'' or items<>'[]' from public.picking_documents where id=a.id) then
   raise exception 'Falha de NF não reverteu a primeira leitura';
  end if;
+ begin
+  perform public.save_picking_versioned(a.id,'','',a.boxes,jsonb_build_array(first_item||'{"qty":0}'),a.revision);
+  raise exception 'Gravação com quantidade zero foi aceita';
+ exception when others then
+  if sqlerrm <> 'Quantidade inválida.' then raise; end if;
+ end;
  a:=public.save_picking_versioned(a.id,'','',a.boxes,jsonb_build_array(first_item),a.revision);
  if a.project<>p or a.station<>s or a.items->0->>'invoice_number'<>'00023/A' or a.revision<>1 then
   raise exception 'Primeira peça e destino não foram persistidos juntos';
@@ -112,14 +118,22 @@ begin
   raise exception 'Conferência desatualizada aceita';
  exception when sqlstate 'P4091' then null;
  end;
- result:=public.close_physical_box(physical,snapshot->>'fingerprint');
+ begin
+  perform public.close_physical_box(physical,snapshot->>'fingerprint',null,repeat('x',2001));
+  raise exception 'Observação acima do limite foi aceita';
+ exception when others then
+  if sqlerrm not like 'Observações inválidas.%' then raise; end if;
+ end;
+ result:=public.close_physical_box(physical,snapshot->>'fingerprint',null,E'Frágil <manusear>\nSeparar & conferir');
  if result->>'status'<>'closed' or result->>'created'<>'true'
    or result->'delivery'->>'closed_by'<>operator_id::text
    or result->'delivery'->'snapshot' is distinct from snapshot->'snapshot'
+   or result->'delivery'->>'observations' is distinct from E'Frágil <manusear>\nSeparar & conferir'
    or result->'delivery'->>'email_state'<>'pending'
  then raise exception 'Entrega do operador não persistiu integralmente';end if;
  if (public.close_physical_box(physical,snapshot->>'fingerprint')->>'created')::boolean
    or public.get_box_delivery(physical)->'snapshot' is distinct from snapshot->'snapshot'
+   or public.get_box_delivery(physical)->>'observations' is distinct from E'Frágil <manusear>\nSeparar & conferir'
  then raise exception 'Fechamento repetido alterou o comprovante';end if;
  perform set_config('test.delivery_box',physical::text,true);
  perform set_config('test.delivery_admin',admin::text,true);
@@ -153,6 +167,7 @@ declare box uuid:=current_setting('test.delivery_box')::uuid;
  admin uuid:=current_setting('test.delivery_admin')::uuid;
  actor uuid:=current_setting('test.warehouse_operator')::uuid;
  first_claim jsonb; second_claim jsonb; frozen jsonb;
+ resend_request uuid:=gen_random_uuid(); earlier_attempt uuid; resend_token uuid;
 begin
  if has_table_privilege('authenticated','smart_private.physical_box_deliveries','UPDATE')
   or has_function_privilege('authenticated','public.claim_box_delivery_email(uuid,uuid)','EXECUTE')
@@ -186,6 +201,26 @@ begin
  end if;
  perform public.finish_box_delivery_email(box,(second_claim->>'token')::uuid,'sent','test-id',null);
  if public.claim_box_delivery_email(box,actor)->>'state'<>'sent' then raise exception 'Repetição após aceite';end if;
+ earlier_attempt:=(second_claim->>'token')::uuid;
+ second_claim:=public.claim_box_delivery_email(box,actor,resend_request,earlier_attempt);
+ resend_token:=(second_claim->>'token')::uuid;
+ if resend_token is null or resend_token=earlier_attempt or second_claim->'delivery' is distinct from frozen or
+  not (second_claim->>'is_copy')::boolean
+ then raise exception 'Reenvio alterou os dados originais ou reutilizou a tentativa'; end if;
+ if (public.claim_box_delivery_email(box,actor,gen_random_uuid(),earlier_attempt)) ? 'token'
+ then raise exception 'Reenvio simultâneo foi permitido'; end if;
+ perform public.finish_box_delivery_email(box,resend_token,'sent','resend-test-id',null);
+ if (public.claim_box_delivery_email(box,actor,resend_request,earlier_attempt)) ? 'token'
+ then raise exception 'O mesmo pedido de reenvio foi aceito novamente'; end if;
+ begin
+  perform public.claim_box_delivery_email(box,actor,gen_random_uuid(),earlier_attempt);
+  raise exception 'Confirmação de reenvio desatualizada foi aceita';
+ exception when sqlstate 'P4091' then null;
+ end;
+ if (select count(*) from smart_private.physical_box_delivery_email_attempts where physical_box_id=box)<>3
+  or not exists(select 1 from smart_private.physical_box_delivery_email_attempts
+    where token=resend_token and actor_id=actor and send_type='resend' and finished_at>=created_at)
+ then raise exception 'Histórico não preservou as tentativas e o solicitante'; end if;
 end $$;
 do $$ begin
  if (select count(*) from smart_private.audit_log where action='picking.invoice')<>3 or

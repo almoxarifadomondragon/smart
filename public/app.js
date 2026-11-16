@@ -208,6 +208,7 @@ async function physicalAction(action,id){
  if(action==='physical-print'){window.print();return;}
  if(action==='physical-refresh'&&physicalView)return openPhysical(physicalView.box.id);
  if(action==='physical-send'&&physicalView)return notifyBoxDelivery(physicalView.box.id);
+ if(action==='physical-resend'&&physicalView?.delivery)return confirmBoxResend(physicalView.delivery);
  if(action==='physical-reconcile'&&physicalView?.delivery)return reconcileBoxDelivery(physicalView.box.id);
  const picker=activeBoxPicker,doc=getDoc();
  if(!picker||!$('#modal').open||picker.docId!==current||!doc)return;
@@ -229,7 +230,7 @@ async function physicalAction(action,id){
   closeModal();render();toast(box?'Vínculo com '+box.code+' salvo.':'Caixa física desvinculada.');
  }
 }
-async function reviewBoxDelivery(id,reason=null){
+async function reviewBoxDelivery(id,reason=null,notes=''){
  let review;
  if(demo){
   const snapshot=await getPhysicalContents(id);
@@ -252,7 +253,7 @@ async function reviewBoxDelivery(id,reason=null){
    $('#delivery-exception').onsubmit=e=>{
     e.preventDefault();
     const note=e.target.querySelector('textarea').value.trim();
-    transaction(async()=>{closeModal();await reviewBoxDelivery(id,note);});
+    transaction(async()=>{closeModal();await reviewBoxDelivery(id,note,notes);});
    };
    return;
   }
@@ -264,21 +265,23 @@ async function reviewBoxDelivery(id,reason=null){
   physicalContentsView({...snapshot,box:{...snapshot.box,status:physicalView.box.status}},{compact:true,receipt:true})+
   (recipient_snapshot?'<h3>Destinatários</h3><ul>'+recipient_snapshot.roles.map(r=>'<li>'+esc(r.role)+' · '+esc(r.email)+'</li>').join('')+'</ul>'+
    (reason?'<p>Exceção administrativa: '+esc(reason)+'</p>':''):'<p>Demonstração local.</p>')+
-  '<form id="delivery-confirm"><div class="dialog-actions"><button type="button" data-action="close">Cancelar</button>'+
+  '<form id="delivery-confirm"><label class="field">Observações da entrega (opcional)<textarea rows="4" maxlength="2000" placeholder="Informe orientações, pendências ou informações relevantes sobre a entrega desta caixa."></textarea></label><div class="dialog-actions"><button type="button" data-action="close">Cancelar</button>'+
   '<button class="primary">Confirmar fechamento e entrega</button></div></form>');
+ $('#delivery-confirm textarea').value=notes;
  $('#delivery-confirm').onsubmit=e=>{
   e.preventDefault();
+  const observations=e.target.querySelector('textarea').value;
   transaction(async()=>{
    let created=false;
    try{
     if(demo){
      const target=demoPhysicalBoxes.find(box=>box.id===id);
      target.status='closed';target.updated_at=new Date().toISOString();
-     target.delivery={snapshot,closed_by_name,closed_at:target.updated_at};
+     target.delivery={snapshot,closed_by_name,closed_at:target.updated_at,observations};
      store();
-    }else ({created}=await api.closePhysicalBox(id,review,reason));
+    }else ({created}=await api.closePhysicalBox(id,review,reason,observations));
    }catch(error){
-    if(error.code==='P4091'){closeModal();await reviewBoxDelivery(id,reason);}
+    if(error.code==='P4091'){closeModal();await reviewBoxDelivery(id,reason,observations);}
     throw error;
    }
    closeModal();
@@ -287,12 +290,25 @@ async function reviewBoxDelivery(id,reason=null){
   });
  };
 }
-async function notifyBoxDelivery(id){
+async function notifyBoxDelivery(id,resend){
  try{
-  const result=await api.sendBoxDelivery(id);
-  toast(result.state==='sent'?'Entrega registrada. E-mail aceito pelo Gmail.':'Entrega registrada. Consulte o estado do e-mail.');
- }catch(error){toast('Entrega registrada. '+error.message);}
+  const result=await api.sendBoxDelivery(id,resend);
+  toast(result.state==='sent'?'E-mail aceito pelo Gmail.':'Consulte o estado do e-mail na caixa.');
+ }catch(error){toast(error.message);}
  await openPhysical(id);
+}
+function confirmBoxResend(delivery){
+ const {box}=delivery.snapshot;
+ const date=value=>new Date(value).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'});
+ const resend={requestId:crypto.randomUUID(),expectedAttempt:delivery.last_attempt_id};
+ showModal('<h2>Reenviar comprovante de entrega</h2><p>'+esc(box.code)+' · Projeto '+esc(box.project)+' · Estação '+esc(box.station)+'</p>'+
+  '<p>Entrega original em '+esc(date(delivery.closed_at))+' · '+esc(delivery.closed_by_name)+'</p>'+
+  '<p>Destinatários originais: '+delivery.recipient_snapshot.emails.map(esc).join(', ')+'</p>'+
+  '<p>Último envio: aceito pelo Gmail'+(delivery.last_sent_at?' em '+esc(date(delivery.last_sent_at)):'')+'.</p>'+
+  '<p>Será enviada uma nova cópia do comprovante original. A data e a hora de entrega permanecerão inalteradas.</p>'+
+  '<form id="delivery-resend"><div class="dialog-actions"><button type="button" data-action="close">Cancelar</button>'+
+  '<button class="primary">Confirmar reenvio</button></div></form>');
+ $('#delivery-resend').onsubmit=e=>{e.preventDefault();transaction(async()=>{closeModal();await notifyBoxDelivery(box.id,resend);});};
 }
 function reconcileBoxDelivery(id){
  showModal('<h2>Conferir resultado no Gmail</h2><p>Consulte a pasta Enviados e confirme o resultado antes de liberar nova tentativa.</p>'+
@@ -326,7 +342,7 @@ function itemModal(data,id){const doc=getDoc();assertEditable(doc,user?.id,demo)
  catch(error){showModal('<h2>Leitura incompatível</h2><p class="error" role="alert" style="white-space:pre-line">'+esc(error.message)+'</p><div class="dialog-actions"><button data-action="close">Voltar para nova leitura</button></div>');return;}
  const projectReadOnly=editing||normalizeDestinationCode(doc.project)||normalizeDestinationCode(data.project)?' readonly aria-readonly="true"':'';
  const stationReadOnly=editing||normalizeDestinationCode(doc.station)||normalizeDestinationCode(data.station)?' readonly aria-readonly="true"':'';
- showModal(`<h2>${editing?'Editar peça':'Conferir leitura'}</h2><p>${editing?'Ajuste os dados ou remaneje a peça para outra caixa.':'Confira os dados do QR code antes de registrar a peça.'}</p><form id="item-form">${field('Código BMA','item-code',data.code,'required pattern="[Bb][Mm][Aa][0-9]{7}" maxlength="10"')}<div class="fields">${field('Projeto','item-project',destination.project,'required maxlength="120"'+projectReadOnly)}${field('Estação','item-station',destination.station,'required maxlength="120"'+stationReadOnly)}</div><div class="fields">${field('Quantidade','item-qty',formatQty(data.qty||1),'inputmode="decimal" required')}<label class="field">Caixa<select id="item-box" required>${doc.boxes.map(b=>`<option value="${b.id}" ${data.box===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label></div>${field('Nota Fiscal (opcional)','item-invoice',data.invoice_number||'','maxlength="60" autocomplete="off"')}<div class="fields">${field('Pedido de compras','item-order',data.purchase_order||'','inputmode="numeric" maxlength="40"')}${field('Item do pedido de compras','item-order-line',data.purchase_order_item||'','inputmode="numeric" maxlength="20"')}</div>${data.qr_prefix?'<p>Prefixo do QR: <strong>'+esc(data.qr_prefix)+'</strong></p>':''}${!editing&&doc.items.some(i=>i.code===data.code)?'<div class="notice">Este BMA já foi lido. Confirmar cria um novo registro; verifique se a repetição é intencional.</div>':''}<div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="primary">${editing?'Salvar alterações':'Confirmar peça'}</button></div></form>`);$('#item-form').onsubmit=e=>{e.preventDefault();transaction(async()=>{const old=structuredClone(doc);const item={id:id||crypto.randomUUID(),code:parseCode($('#item-code').value),project:normalizeDestinationCode($('#item-project').value),station:normalizeDestinationCode($('#item-station').value),qty:parseQuantity($('#item-qty').value),invoice_number:validateInvoice($('#item-invoice')?.value),purchase_order:$('#item-order').value.trim(),purchase_order_item:$('#item-order-line').value.trim(),qr_prefix:data.qr_prefix||'',box:$('#item-box').value,scanned_at:data.scanned_at||new Date().toISOString(),operator:data.operator||name()};validatePurchase(item.purchase_order,item.purchase_order_item);if(id&&old.items.find(i=>i.id===id)?.invoice_number&&!item.invoice_number&&!window.confirm('Limpar a Nota Fiscal desta peça?'))return;if(!item.project||!item.station||!doc.boxes.some(b=>b.id===item.box))throw new Error('Confira os dados da peça e a caixa.');const target=resolveItemDestination(doc,item);Object.assign(item,target);if(editing)doc.items[doc.items.findIndex(i=>i.id===id)]=item;else doc.items.push(item);Object.assign(doc,target);try{await persist(doc);}catch(e){Object.assign(doc,old);throw e;}closeModal();render();toast(editing?'Peça atualizada.':'Peça registrada com sucesso.');$('#scan-code')?.focus();});};}
+ showModal(`<h2>${editing?'Editar peça':'Conferir leitura'}</h2><p>${editing?'Ajuste os dados ou remaneje a peça para outra caixa.':'Confira os dados do QR code antes de registrar a peça.'}</p><form id="item-form">${field('Código BMA','item-code',data.code,'required pattern="[Bb][Mm][Aa][0-9]{7}" maxlength="10"')}<div class="fields">${field('Projeto','item-project',destination.project,'required maxlength="120"'+projectReadOnly)}${field('Estação','item-station',destination.station,'required maxlength="120"'+stationReadOnly)}</div><div class="fields">${field('Quantidade','item-qty',formatQty(data.qty??1),'inputmode="decimal" required'+(data.qty===0?' aria-describedby="zero-quantity" class="zero-quantity"':''))}<label class="field">Caixa<select id="item-box" required>${doc.boxes.map(b=>`<option value="${b.id}" ${data.box===b.id?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label></div>${data.qty===0?'<p class="notice" id="zero-quantity">Quantidade zerada na etiqueta. Informe a quantidade real antes de confirmar a peça.</p>':''}${field('Nota Fiscal (opcional)','item-invoice',data.invoice_number||'','maxlength="60" autocomplete="off"')}<div class="fields">${field('Pedido de compras','item-order',data.purchase_order||'','inputmode="numeric" maxlength="40"')}${field('Item do pedido de compras','item-order-line',data.purchase_order_item||'','inputmode="numeric" maxlength="20"')}</div>${data.qr_prefix?'<p>Prefixo do QR: <strong>'+esc(data.qr_prefix)+'</strong></p>':''}${!editing&&doc.items.some(i=>i.code===data.code)?'<div class="notice">Este BMA já foi lido. Confirmar cria um novo registro; verifique se a repetição é intencional.</div>':''}<div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="primary">${editing?'Salvar alterações':'Confirmar peça'}</button></div></form>`);if(data.qty===0){$('#item-qty').focus();$('#item-qty').select();}$('#item-form').onsubmit=e=>{e.preventDefault();transaction(async()=>{const old=structuredClone(doc);const item={id:id||crypto.randomUUID(),code:parseCode($('#item-code').value),project:normalizeDestinationCode($('#item-project').value),station:normalizeDestinationCode($('#item-station').value),qty:parseQuantity($('#item-qty').value),invoice_number:validateInvoice($('#item-invoice')?.value),purchase_order:$('#item-order').value.trim(),purchase_order_item:$('#item-order-line').value.trim(),qr_prefix:data.qr_prefix||'',box:$('#item-box').value,scanned_at:data.scanned_at||new Date().toISOString(),operator:data.operator||name()};validatePurchase(item.purchase_order,item.purchase_order_item);if(id&&old.items.find(i=>i.id===id)?.invoice_number&&!item.invoice_number&&!window.confirm('Limpar a Nota Fiscal desta peça?'))return;if(!item.project||!item.station||!doc.boxes.some(b=>b.id===item.box))throw new Error('Confira os dados da peça e a caixa.');const target=resolveItemDestination(doc,item);Object.assign(item,target);if(editing)doc.items[doc.items.findIndex(i=>i.id===id)]=item;else doc.items.push(item);Object.assign(doc,target);try{await persist(doc);}catch(e){Object.assign(doc,old);throw e;}closeModal();render();toast(editing?'Peça atualizada.':'Peça registrada com sucesso.');$('#scan-code')?.focus();});};}
 function boxModal(id){const doc=getDoc();assertEditable(doc,user?.id,demo);const box=doc.boxes.find(b=>b.id===id);showModal(`<h2>${box?'Editar caixa':'Adicionar caixa'}</h2><p>Use um nome que facilite a identificação física do volume.</p><form id="box-form">${field('Nome da caixa','box-name',box?.name||`Caixa ${String(doc.boxes.length+1).padStart(2,'0')}`,'required maxlength="60"')}<div class="dialog-actions">${box?'<button type="button" class="danger" data-action="delete-box" data-id="'+id+'">Remover</button>':''}<button type="button" data-action="close">Cancelar</button><button class="primary">Salvar caixa</button></div></form>`);$('#box-form').onsubmit=e=>{e.preventDefault();transaction(async()=>{const value=$('#box-name').value.trim();if(!value)throw new Error('Informe o nome da caixa.');if(doc.boxes.some(b=>b.name===value&&b.id!==id))throw new Error('Já existe uma caixa com esse nome.');const old=structuredClone(doc);if(box)box.name=value;else doc.boxes.push({id:crypto.randomUUID(),name:value});try{await persist(doc);}catch(e){Object.assign(doc,old);throw e;}closeModal();render();});};}
 async function sendEmail(doc){try{await api.sendManifest(doc.id);doc.email_status='sent';doc.email_delivery_state='sent';toast('Romaneio aceito pelo Gmail para os destinatários cadastrados.');}catch(e){try{const latest=await api.getDocument(doc.id);if(latest)Object.assign(doc,latest);}catch{}toast('Romaneio confirmado; e-mail pendente: '+e.message);}render();}
 function stopCamera(){clearTimeout(cameraTimer);stream?.getTracks().forEach(t=>t.stop());stream=null;}

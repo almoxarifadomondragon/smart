@@ -93,11 +93,12 @@ export function deliveryStatusView(delivery,{admin=false}={}){
   '<div class="actions"><button data-action="physical-receipt">Comprovante de entrega</button>'+
   (state?'<button data-action="physical-refresh">Atualizar estado do e-mail</button>':'')+
   (['pending','failed'].includes(state)?'<button data-action="physical-send">'+(state==='failed'?'Reenviar e-mail':'Enviar e-mail')+'</button>':'')+
+  (state==='sent'&&delivery.last_attempt_id?'<button data-action="physical-resend">Reenviar recibo por e-mail</button>':'')+
   (state==='uncertain'&&admin?'<button data-action="physical-reconcile">Conferir resultado no Gmail</button>':'')+
   '</div></div></section>';
 }
 export function deliveryReceiptView(delivery){
- const {snapshot,closed_by_name,closed_at}=delivery;
+ const {snapshot,closed_by_name,closed_at,observations}=delivery;
  const manifests=snapshot.documents.map(doc=>'<tr><td>#'+pad(doc.number)+'</td><td>'+esc(doc.responsible||'—')+
   '</td><td>'+esc(deliveryDate(doc.confirmed_at))+'</td><td>'+esc(doc.item_count??'—')+'</td><td>'+formatQty(doc.total_units??0)+'</td></tr>').join('');
  return '<article class="delivery-receipt"><img src="./logo.png" width="160" alt="Mondragon Assembly">'+
@@ -106,7 +107,7 @@ export function deliveryReceiptView(delivery){
   '<th>Romaneio</th><th>Responsável</th><th>Confirmação</th><th>Registros BMA</th><th>Unidades</th>'+
   '</tr></thead><tbody>'+manifests+'</tbody></table></div>'+physicalContentsView({
    ...snapshot,documents:snapshot.documents.map(doc=>({...doc,status:'confirmed'}))
-  },{compact:true,receipt:true})+'</article>';
+  },{compact:true,receipt:true})+(observations?'<section><h3>Observações da entrega</h3><p class="delivery-observations">'+esc(observations)+'</p></section>':'')+'</article>';
 }
 export function physicalLabelView(box,base,qrCode,demo=false){
  const url=physicalBoxLink(base,box.id,demo);

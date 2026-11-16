@@ -39,7 +39,8 @@ async function invoke({body={id},authorization='Bearer session',active=true,clai
    assert.equal(init.headers.Authorization,'Bearer service-key');
    const payload=JSON.parse(init.body);
    if(url.endsWith('/claim_box_delivery_email')){
-    assert.deepEqual(payload,{p_id:id,p_actor:'verified-user'});
+    assert.deepEqual(payload,{p_id:id,p_actor:'verified-user',
+     ...(body.requestId?{p_request:body.requestId,p_expected_attempt:body.expectedAttempt}:{})});
     return active?Response.json(claim??{token:'reservation',delivery}):Response.json({code:'42501'},{status:403});
    }
    assert.ok(url.endsWith('/finish_box_delivery_email'));
@@ -60,6 +61,19 @@ test('Entrega envia a cópia congelada e mantém as duas origens do mesmo BMA',a
  assert.match(mail.subject,/CX-000015 \| Projeto 0001/);
  assert.equal((mail.html.match(/BMA0013539/g)||[]).length,2);
  for(const value of ['00023/A','00024/B','#000031','#000038','&lt;Caixa&gt;','#caixa_fisica='+id])assert.ok(mail.html.includes(value));
+});
+
+test('Reenvio usa tentativa própria, observações escapadas e data original',async()=>{
+ const requestId='12345678-1234-1234-1234-123456789abc';
+ const expectedAttempt='87654321-1234-1234-1234-123456789abc';
+ const original={...delivery,observations:'Cuidado <frágil>\nConferir & separar'};
+ const result=await invoke({body:{id,requestId,expectedAttempt},claim:{token:'reservation',delivery:original,is_copy:true}});
+ assert.equal(result.data.state,'sent');
+ assert.match(result.mail.subject,/REENVIO DO COMPROVANTE DE ENTREGA/);
+ assert.match(result.mail.messageId,/-reservation@gmail\.com>$/);
+ assert.match(result.mail.html,/Data\/hora original da entrega/);
+ assert.match(result.mail.html,/Cuidado &lt;frágil&gt;<br>Conferir &amp; separar/);
+ assert.match(deliveryReceiptView(original),/Cuidado &lt;frágil&gt;\nConferir &amp; separar/);
 });
 
 test('Entrega rejeita conteúdo do cliente e bloqueia chamadas sem autorização ou reserva',async()=>{

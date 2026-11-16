@@ -33,7 +33,7 @@ test('decimais e zeros iniciais preservados nos identificadores',()=>{
  const doc=make();doc.project=item.project;doc.station=item.station;doc.items[0]={...doc.items[0],...item};assert.equal(validateManifest(doc),true);
 });
 test('recusa QR incompleto e pedido/quantidade inválidos',()=>{
- for(const code of ['180$BMA0013539$25024$31133$1,00$21117','180$BMA0013539$$31133$1,00$21117$1','180$BMA0013539$25024$31133$0,00$21117$1','180$BMA0013539$25024$31133$1,234$21117$1','180$BMA0013539$25024$31133$1,00$21117$X','180$BMA0013539$25024$31133$1,00$21117$1$extra'])assert.throws(()=>parseQR(code));
+ for(const code of ['180$BMA0013539$25024$31133$1,00$21117','180$BMA0013539$$31133$1,00$21117$1','180$BMA0013539$25024$31133$-1,00$21117$1','180$BMA0013539$25024$31133$1,234$21117$1','180$BMA0013539$25024$31133$1,00$21117$X','180$BMA0013539$25024$31133$1,00$21117$1$extra'])assert.throws(()=>parseQR(code));
  for(const qty of ['1,2.3','NaN','Infinity','1e3','-1','1000000',''])assert.throws(()=>parseQuantity(qty));
  const doc=make();doc.items[0].purchase_order='21117';assert.throws(()=>validateManifest(doc));
 });
@@ -44,4 +44,16 @@ test('CSV preserva campos do QR e neutraliza fórmulas em texto',()=>{
  assert.ok(csv.includes('"Pedido de compras";"Item do pedido";"Prefixo QR"'));
  assert.ok(csv.includes('"000148";"BMA0013539";"25024";"31133";"1,00";"21117";"1";"180";"Caixa 01"'));
  assert.ok(csv.includes('"\'=HYPERLINK(""teste"")"'));
+});
+
+test('zero no QR é temporário e a correção positiva aparece no CSV',()=>{
+ for(const raw of ['0','0,00','0.00','1,00','2,50']){
+  assert.equal(parseQR('180$BMA0013539$26005$31200$'+raw+'$21117$1').qty,Number(raw.replace(',','.')));
+ }
+ for(const raw of ['-1','texto','1000000'])assert.throws(()=>parseQR('180$BMA0013539$26005$31200$'+raw+'$21117$1'));
+ assert.equal(parseQR('{"bma":"BMA0013539","quantidade":0}').qty,0);
+ assert.equal(parseQR('BMA: BMA0013539; Quantidade: 0,00').qty,0);
+ assert.throws(()=>parseQuantity('0,00'),/maior que zero/);
+ const doc=make();doc.items[0].qty=parseQuantity('2,50');assert.equal(validateManifest(doc),true);
+ assert.match(manifestCsv(doc),/"2,50"/);
 });

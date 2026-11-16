@@ -25,8 +25,8 @@ export const createPhysicalBox = (documentId,id,name) => request('/rest/v1/rpc/c
 export const getPhysicalBox = id => request('/rest/v1/rpc/get_physical_box','POST',{p_id:id});
 export const previewBoxDelivery = (id,reason) => request('/rest/v1/rpc/preview_box_delivery','POST',{p_id:id,p_reason:reason});
 export const getBoxDelivery = id => request('/rest/v1/rpc/get_box_delivery','POST',{p_id:id});
-export const closePhysicalBox = (id,review,reason) => request('/rest/v1/rpc/close_physical_box','POST',{p_id:id,p_expected:review.fingerprint,p_reason:reason});
-export const sendBoxDelivery = id => request('/functions/v1/send-box-delivery','POST',{id});
+export const closePhysicalBox = (id,review,reason,observations) => request('/rest/v1/rpc/close_physical_box','POST',{p_id:id,p_expected:review.fingerprint,p_reason:reason,p_observations:observations});
+export const sendBoxDelivery = (id,resend) => request('/functions/v1/send-box-delivery','POST',{id,...resend});
 export const reconcileBoxDelivery = (id,sent,note) => request('/rest/v1/rpc/reconcile_box_delivery_email','POST',{p_id:id,p_sent:sent,p_note:note});
 export const finalizeDocument = (id,approval) => request('/rest/v1/rpc/finalize_picking','POST',{p_id:id,p_additional:approval.additional,p_exception_reason:approval.reason,p_expected:approval.fingerprint});
 export const sendManifest = id => request('/functions/v1/send-manifest','POST',{id});
