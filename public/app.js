@@ -1,5 +1,5 @@
 import {boxLink,boxRoute,boxDetails,physicalBoxRoute,physicalBoxLink} from './labels.js';
-import {assertPhysicalDestination,bindVolume,demoPhysicalContents,invoiceBatchView,physicalContentsView,physicalLabelView,physicalListView,planInvoice,validateInvoice,volumeName} from './warehouse.js';
+import {assertPhysicalDestination,bindVolume,deliveryReceiptView,deliveryStatusView,demoPhysicalContents,invoiceBatchView,physicalContentsView,physicalLabelView,physicalListView,planInvoice,validateInvoice,volumeName} from './warehouse.js';
 import * as api from './api.js';
 import {HistorySearch,historyView,bindHistory,dashboardTotals,documentSummary,searchDemo} from './history.js';
 import {ownsPicking,ownDraft,assertEditable,operationMessage,showOperationError} from './picking-access.js';
@@ -46,7 +46,7 @@ function render(){
  const doc=getDoc(),totals=demo?dashboardTotals(docs):globalTotals;
  const titles={picking:'Separação de peças',history:'Romaneios digitais',settings:'Configurações',overview:'Visão geral',physical:'Caixa física'};
  const stat=(key)=>totals?Number(totals[key]).toLocaleString('pt-BR'):'—';
- $('#app').innerHTML=`<div class="layout"><aside class="sidebar"><div class="brand"><img class="logo" src="./logo.png" alt="Mondragon Assembly"><small>ALMOXARIFADO DIGITAL</small></div><div class="nav-label">ÁREA DE TRABALHO</div><nav class="nav"><button data-view="overview" class="${view==='overview'?'active':''}">${icon('grid')}Visão geral</button><button data-view="picking" class="${view==='picking'?'active':''}">${icon('scan')}Separação <span class="count" data-stat="drafts">${stat('drafts')}</span></button><button data-view="history" class="${view==='history'?'active':''}">${icon('file')}Romaneios</button><button data-view="settings" class="${view==='settings'?'active':''}">${icon('settings')}Configurações</button></nav><div class="sidebar-bottom"><div class="help">${icon('shield')}<h3 style="margin-top:9px">Do físico ao digital.</h3><p>Mais rastreabilidade.<br>Menos papel. Mais agilidade.</p></div><div class="profile"><span class="avatar">${esc(name().slice(0,2).toUpperCase())}</span><div><strong>${esc(name())}</strong><small>Almoxarifado${demo?' · Demo':''}</small></div><button title="Sair" aria-label="Sair" class="ghost" data-action="logout">${icon('logout')}</button></div></div></aside><main class="main"><header class="topbar"><div class="crumb">Operações <span>/</span><strong>${titles[view]}</strong></div><div class="top-right"><span class="online"><i class="dot"></i>${demo?'Ambiente de demonstração':'Sessão Supabase'}</span><span class="date">${new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'})}</span><button class="ghost mobile-brand" data-action="logout">Sair</button></div></header><div class="workspace"><div class="heading"><div><div class="eyebrow">CONTROLE E RASTREABILIDADE</div><h1>${titles[view]}</h1><p>${view==='picking'?'Organize peças, monte caixas e simplifique a entrega.':view==='history'?'Cada entrega registrada, do início ao destino.':view==='settings'?'Defina quem recebe os romaneios da operação.':view==='physical'?'Consulte os materiais associados a esta caixa.':'Uma visão conectada da sua operação.'}</p></div>${view!=='settings'?`<button class="primary" data-action="new">${icon('plus')} Nova separação</button>`:''}</div>${view!=='settings'?`<section class="stats"><div class="stat">${icon('scan')}<label>Separações em andamento</label><strong data-stat="drafts">${stat('drafts')}</strong><small>Aguardando conclusão</small></div><div class="stat">${icon('check')}<label>Romaneios confirmados</label><strong data-stat="confirmed">${stat('confirmed')}</strong><small class="positive">Prontos para consulta</small></div><div class="stat">${icon('box')}<label>Peças registradas</label><strong data-stat="units">${stat('units')}</strong><small>Quantidade total de unidades</small></div><div class="stat">${icon('file')}<label>Caixas organizadas</label><strong data-stat="boxes">${stat('boxes')}</strong><small>Em todas as separações</small></div></section>`:''}<div id="page">${view==='picking'?picking(doc):view==='settings'?settings():view==='physical'&&physicalView?physicalContentsView(physicalView):historyView(searchState(),{userId:user?.id,demo})}</div><footer class="footnote"><span>MONDRAGON ASSEMBLY <span style="margin:0 7px">•</span> Almoxarifado digital</span><span>${demo?'Protótipo · dados locais':'Operação integrada'} / v0.1</span></footer></div></main></div>`;
+ $('#app').innerHTML=`<div class="layout"><aside class="sidebar"><div class="brand"><img class="logo" src="./logo.png" alt="Mondragon Assembly"><small>ALMOXARIFADO DIGITAL</small></div><div class="nav-label">ÁREA DE TRABALHO</div><nav class="nav"><button data-view="overview" class="${view==='overview'?'active':''}">${icon('grid')}Visão geral</button><button data-view="picking" class="${view==='picking'?'active':''}">${icon('scan')}Separação <span class="count" data-stat="drafts">${stat('drafts')}</span></button><button data-view="history" class="${view==='history'?'active':''}">${icon('file')}Romaneios</button><button data-view="settings" class="${view==='settings'?'active':''}">${icon('settings')}Configurações</button></nav><div class="sidebar-bottom"><div class="help">${icon('shield')}<h3 style="margin-top:9px">Do físico ao digital.</h3><p>Mais rastreabilidade.<br>Menos papel. Mais agilidade.</p></div><div class="profile"><span class="avatar">${esc(name().slice(0,2).toUpperCase())}</span><div><strong>${esc(name())}</strong><small>Almoxarifado${demo?' · Demo':''}</small></div><button title="Sair" aria-label="Sair" class="ghost" data-action="logout">${icon('logout')}</button></div></div></aside><main class="main"><header class="topbar"><div class="crumb">Operações <span>/</span><strong>${titles[view]}</strong></div><div class="top-right"><span class="online"><i class="dot"></i>${demo?'Ambiente de demonstração':'Sessão Supabase'}</span><span class="date">${new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'})}</span><button class="ghost mobile-brand" data-action="logout">Sair</button></div></header><div class="workspace"><div class="heading"><div><div class="eyebrow">CONTROLE E RASTREABILIDADE</div><h1>${titles[view]}</h1><p>${view==='picking'?'Organize peças, monte caixas e simplifique a entrega.':view==='history'?'Cada entrega registrada, do início ao destino.':view==='settings'?'Defina quem recebe os romaneios da operação.':view==='physical'?'Consulte os materiais associados a esta caixa.':'Uma visão conectada da sua operação.'}</p></div>${view!=='settings'?`<button class="primary" data-action="new">${icon('plus')} Nova separação</button>`:''}</div>${view!=='settings'?`<section class="stats"><div class="stat">${icon('scan')}<label>Separações em andamento</label><strong data-stat="drafts">${stat('drafts')}</strong><small>Aguardando conclusão</small></div><div class="stat">${icon('check')}<label>Romaneios confirmados</label><strong data-stat="confirmed">${stat('confirmed')}</strong><small class="positive">Prontos para consulta</small></div><div class="stat">${icon('box')}<label>Peças registradas</label><strong data-stat="units">${stat('units')}</strong><small>Quantidade total de unidades</small></div><div class="stat">${icon('file')}<label>Caixas organizadas</label><strong data-stat="boxes">${stat('boxes')}</strong><small>Em todas as separações</small></div></section>`:''}<div id="page">${view==='picking'?picking(doc):view==='settings'?settings():view==='physical'&&physicalView?((physicalView.box.status==='closed'?deliveryStatusView(physicalView.delivery,{admin:isAdmin()}):'')+physicalContentsView(physicalView)):historyView(searchState(),{userId:user?.id,demo})}</div><footer class="footnote"><span>MONDRAGON ASSEMBLY <span style="margin:0 7px">•</span> Almoxarifado digital</span><span>${demo?'Protótipo · dados locais':'Operação integrada'} / v0.1</span></footer></div></main></div>`;
  if(view==='settings')bindSettings();
  if(['history','overview'].includes(view)){bindHistory($('#page'),searchState(),loadHistory);if(!searchState().result&&!searchState().loading&&!searchState().error)void loadHistory();}
  paintTotals();
@@ -134,10 +134,14 @@ function checkDemoPhysical(doc){
  }
 }
 async function getPhysicalContents(id){
- if(!demo)return api.getPhysicalBox(id);
+ if(!demo){
+  const result=await api.getPhysicalBox(id);
+  if(result.box.status==='closed')result.delivery=await api.getBoxDelivery(id);
+  return result;
+ }
  const box=demoPhysicalBoxes.find(b=>b.id===id);
  if(!box)throw new Error('Caixa física não encontrada nesta demonstração.');
- return demoPhysicalContents(box,docs);
+ return {...demoPhysicalContents(box,docs),delivery:box.delivery};
 }
 async function openPhysical(id){
  const result=await getPhysicalContents(id);
@@ -195,15 +199,16 @@ async function physicalAction(action,id){
  if(action==='physical-picker')return physicalPicker(id);
  if(action==='physical-view'){await openPhysical(id);if($('#modal').open)closeModal();return;}
  if(action==='physical-label'&&physicalView)return showPermanentLabel(physicalView.box);
- if(action==='physical-close'&&physicalView){
-  const {box}=physicalView;
-  if(!window.confirm('Fechar '+box.code+'? A caixa permanecerá disponível para consulta, mas não receberá novos materiais.'))return;
-  if(demo){
-   if(docs.some(d=>d.status==='draft'&&d.boxes.some(b=>b.physical_box_id===box.id)))throw new Error('Conclua ou desvincule os rascunhos antes de fechar a caixa.');
-   const target=demoPhysicalBoxes.find(b=>b.id===box.id);target.status='closed';target.updated_at=new Date().toISOString();store();
-  }else await api.closePhysicalBox(box.id);
-  await openPhysical(box.id);return;
+ if(action==='physical-close'&&physicalView)return reviewBoxDelivery(physicalView.box.id);
+ if(action==='physical-receipt'&&physicalView?.delivery){
+  showModal(deliveryReceiptView(physicalView.delivery)+'<div class="dialog-actions">'+
+   '<button data-action="close">Fechar</button><button class="primary" data-action="physical-print">Imprimir / Salvar PDF</button></div>');
+  return;
  }
+ if(action==='physical-print'){window.print();return;}
+ if(action==='physical-refresh'&&physicalView)return openPhysical(physicalView.box.id);
+ if(action==='physical-send'&&physicalView)return notifyBoxDelivery(physicalView.box.id);
+ if(action==='physical-reconcile'&&physicalView?.delivery)return reconcileBoxDelivery(physicalView.box.id);
  const picker=activeBoxPicker,doc=getDoc();
  if(!picker||!$('#modal').open||picker.docId!==current||!doc)return;
  if(action==='physical-consult'){
@@ -223,6 +228,84 @@ async function physicalAction(action,id){
   await saveDraftChange(doc,{boxes:bindVolume(doc,volume.id,box)});
   closeModal();render();toast(box?'Vínculo com '+box.code+' salvo.':'Caixa física desvinculada.');
  }
+}
+async function reviewBoxDelivery(id,reason=null){
+ let review;
+ if(demo){
+  const snapshot=await getPhysicalContents(id);
+  if(snapshot.documents.some(doc=>doc.status!=='confirmed'))throw new Error('Conclua ou desvincule os rascunhos antes de fechar a caixa.');
+  if(!snapshot.items.length)throw new Error('A caixa precisa ter materiais registrados.');
+  snapshot.box={...snapshot.box,status:'closed',can_close:false};
+  for(const manifest of snapshot.documents){
+   const doc=docs.find(entry=>entry.id===manifest.id);
+   const items=snapshot.items.filter(item=>item.document_id===manifest.id);
+   Object.assign(manifest,{responsible:doc.responsible,confirmed_at:doc.confirmed_at,item_count:items.length,total_units:totalQty(items)});
+  }
+  review={snapshot,closed_by_name:name()};
+ }else{
+  try{review=await api.previewBoxDelivery(id,reason);}
+  catch(error){
+   if(error.code!=='P4221'||!isAdmin())throw error;
+   showModal('<h2>Projeto sem gestor ativo</h2><p>Registre uma justificativa para conferir a entrega sem o gestor.</p>'+
+    '<form id="delivery-exception"><label class="field">Justificativa<textarea required minlength="10" maxlength="500"></textarea></label>'+
+    '<div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="primary">Conferir entrega</button></div></form>');
+   $('#delivery-exception').onsubmit=e=>{
+    e.preventDefault();
+    const note=e.target.querySelector('textarea').value.trim();
+    transaction(async()=>{closeModal();await reviewBoxDelivery(id,note);});
+   };
+   return;
+  }
+ }
+ const {snapshot,closed_by_name,recipient_snapshot}=review;
+ showModal('<h2>Confirmar entrega da caixa à Produção</h2>'+
+  '<p>Confirme que os materiais relacionados estão na caixa física e que ela será entregue à Produção. Após o fechamento, a caixa não poderá receber novas separações.</p>'+
+  '<p>Responsável: <strong>'+esc(closed_by_name)+'</strong>. O servidor registra a data e a hora na confirmação.</p>'+
+  physicalContentsView({...snapshot,box:{...snapshot.box,status:physicalView.box.status}},{compact:true,receipt:true})+
+  (recipient_snapshot?'<h3>Destinatários</h3><ul>'+recipient_snapshot.roles.map(r=>'<li>'+esc(r.role)+' · '+esc(r.email)+'</li>').join('')+'</ul>'+
+   (reason?'<p>Exceção administrativa: '+esc(reason)+'</p>':''):'<p>Demonstração local.</p>')+
+  '<form id="delivery-confirm"><div class="dialog-actions"><button type="button" data-action="close">Cancelar</button>'+
+  '<button class="primary">Confirmar fechamento e entrega</button></div></form>');
+ $('#delivery-confirm').onsubmit=e=>{
+  e.preventDefault();
+  transaction(async()=>{
+   let created=false;
+   try{
+    if(demo){
+     const target=demoPhysicalBoxes.find(box=>box.id===id);
+     target.status='closed';target.updated_at=new Date().toISOString();
+     target.delivery={snapshot,closed_by_name,closed_at:target.updated_at};
+     store();
+    }else ({created}=await api.closePhysicalBox(id,review,reason));
+   }catch(error){
+    if(error.code==='P4091'){closeModal();await reviewBoxDelivery(id,reason);}
+    throw error;
+   }
+   closeModal();
+   if(created)await notifyBoxDelivery(id);
+   else await openPhysical(id);
+  });
+ };
+}
+async function notifyBoxDelivery(id){
+ try{
+  const result=await api.sendBoxDelivery(id);
+  toast(result.state==='sent'?'Entrega registrada. E-mail aceito pelo Gmail.':'Entrega registrada. Consulte o estado do e-mail.');
+ }catch(error){toast('Entrega registrada. '+error.message);}
+ await openPhysical(id);
+}
+function reconcileBoxDelivery(id){
+ showModal('<h2>Conferir resultado no Gmail</h2><p>Consulte a pasta Enviados e confirme o resultado antes de liberar nova tentativa.</p>'+
+  '<form id="delivery-reconcile"><label class="field">Resultado<select required><option value="">Selecione</option>'+
+  '<option value="sent">Envio confirmado</option><option value="failed">Confirmado que o e-mail não foi enviado</option></select></label>'+
+  '<label class="field">Justificativa<textarea required minlength="10" maxlength="500"></textarea></label>'+
+  '<div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="primary">Registrar conferência</button></div></form>');
+ $('#delivery-reconcile').onsubmit=e=>{
+  e.preventDefault();
+  const sent=e.target.querySelector('select').value==='sent';
+  const note=e.target.querySelector('textarea').value;
+  transaction(async()=>{await api.reconcileBoxDelivery(id,sent,note);closeModal();await openPhysical(id);});
+ };
 }
 function showPermanentLabel(box){
  const data=physicalLabelView(box,location.href,url=>{

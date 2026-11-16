@@ -15,6 +15,7 @@ declare
  a public.picking_documents; b public.picking_documents; other public.picking_documents;
  first_item jsonb; second_item jsonb; boxes jsonb; stale bigint; snapshot jsonb;
  original jsonb; result jsonb; physical uuid:=gen_random_uuid(); code text; rejected boolean;
+ empty_box uuid:=gen_random_uuid();
 begin
  if admin is null or operator_id is null then raise exception 'Fixture sem duas identidades'; end if;
  perform public.save_project_manager(null,p,'warehouse-manager@example.invalid',true);
@@ -97,13 +98,38 @@ begin
  begin perform public.save_picking_versioned(a.id,p,s,a.boxes,a.items,a.revision);
  exception when others then if sqlerrm like '%outro usuário%' then rejected:=true;else raise;end if;end;
  if not rejected then raise exception 'Outro operador conseguiu modificar o romaneio';end if;
- perform set_config('request.jwt.claim.sub',admin::text,true);
- if public.close_physical_box(physical)->>'status'<>'closed' then raise exception 'Fechamento não persistiu';end if;
+ other:=public.create_picking(p,s);
+ perform public.create_physical_box(other.id,empty_box,'Caixa vazia');
+ begin
+  perform public.preview_box_delivery(empty_box);
+  raise exception 'Fechamento de caixa vazia aceito';
+ exception when others then
+  if sqlerrm not like 'A caixa precisa ter materiais%' then raise; end if;
+ end;
+ snapshot:=public.preview_box_delivery(physical);
+ begin
+  perform public.close_physical_box(physical,'desatualizado');
+  raise exception 'Conferência desatualizada aceita';
+ exception when sqlstate 'P4091' then null;
+ end;
+ result:=public.close_physical_box(physical,snapshot->>'fingerprint');
+ if result->>'status'<>'closed' or result->>'created'<>'true'
+   or result->'delivery'->>'closed_by'<>operator_id::text
+   or result->'delivery'->'snapshot' is distinct from snapshot->'snapshot'
+   or result->'delivery'->>'email_state'<>'pending'
+ then raise exception 'Entrega do operador não persistiu integralmente';end if;
+ if (public.close_physical_box(physical,snapshot->>'fingerprint')->>'created')::boolean
+   or public.get_box_delivery(physical)->'snapshot' is distinct from snapshot->'snapshot'
+ then raise exception 'Fechamento repetido alterou o comprovante';end if;
+ perform set_config('test.delivery_box',physical::text,true);
+ perform set_config('test.delivery_admin',admin::text,true);
  other:=public.create_picking(p,s);
  rejected:=false;
  begin perform public.save_picking_versioned(other.id,p,s,jsonb_set(other.boxes,'{0,physical_box_id}',to_jsonb(physical::text)),'[]',other.revision);
  exception when sqlstate 'P4226' then rejected:=true;end;
- if not rejected or public.list_physical_boxes(p,s)<>'[]' then raise exception 'Caixa fechada voltou a aceitar vínculos';end if;
+ if not rejected or exists(
+  select 1 from jsonb_array_elements(public.list_physical_boxes(p,s)) available where available->>'id'=physical::text
+ ) then raise exception 'Caixa fechada voltou a aceitar vínculos';end if;
  result:=public.get_physical_box(physical);
  if result->'box'->>'id'<>physical::text or jsonb_array_length(result->'items')<>2 then raise exception 'Fechamento perdeu histórico';end if;
  if has_table_privilege('authenticated','smart_private.physical_boxes','SELECT')
@@ -115,11 +141,55 @@ begin
  rejected:=false;
  begin perform public.get_physical_box(physical); exception when insufficient_privilege then rejected:=true;end;
  if not rejected then raise exception 'QR permitiu consulta sem vínculo ativo';end if;
+ begin
+  perform public.close_physical_box(physical,snapshot->>'fingerprint');
+  raise exception 'Fechamento permitiu acesso sem vínculo ativo';
+ exception when insufficient_privilege then null;
+ end;
 end $$;
 reset role;
+do $$
+declare box uuid:=current_setting('test.delivery_box')::uuid;
+ admin uuid:=current_setting('test.delivery_admin')::uuid;
+ actor uuid:=current_setting('test.warehouse_operator')::uuid;
+ first_claim jsonb; second_claim jsonb; frozen jsonb;
+begin
+ if has_table_privilege('authenticated','smart_private.physical_box_deliveries','UPDATE')
+  or has_function_privilege('authenticated','public.claim_box_delivery_email(uuid,uuid)','EXECUTE')
+  or has_function_privilege('anon','public.get_box_delivery(uuid)','EXECUTE')
+ then raise exception 'Privilégio indevido nas entregas';end if;
+ first_claim:=public.claim_box_delivery_email(box,actor);
+ frozen:=first_claim->'delivery';
+ if first_claim->>'token' is null or not (frozen->'recipient_snapshot'->'emails' ? 'warehouse-manager@example.invalid')
+ then raise exception 'Reserva ou gestor congelado ausente';end if;
+ begin
+  update smart_private.physical_box_deliveries set closed_by_name='Alterado' where physical_box_id=box;
+  raise exception 'Comprovante foi alterado';
+ exception when others then
+  if sqlerrm not like 'O comprovante de entrega é imutável.%' then raise; end if;
+ end;
+ second_claim:=public.claim_box_delivery_email(box,actor);
+ if second_claim->>'state'<>'sending' or second_claim ? 'token' then raise exception 'Reserva duplicada'; end if;
+ perform public.finish_box_delivery_email(box,(first_claim->>'token')::uuid,'uncertain',null,'test_timeout');
+ if public.claim_box_delivery_email(box,actor)->>'state'<>'uncertain' then raise exception 'Reenvio incerto liberado';end if;
+ perform set_config('request.jwt.claim.sub',actor::text,true);
+ begin
+  perform public.reconcile_box_delivery_email(box,false,'Conferência de teste.');
+  raise exception 'Operador conseguiu reconciliar envio incerto';
+ exception when insufficient_privilege then null;
+ end;
+ perform set_config('request.jwt.claim.sub',admin::text,true);
+ perform public.reconcile_box_delivery_email(box,false,'Conferência de teste.');
+ second_claim:=public.claim_box_delivery_email(box,actor);
+ if second_claim->>'token' is null or second_claim->'delivery' is distinct from frozen then
+  raise exception 'Reenvio não preservou o comprovante e os destinatários';
+ end if;
+ perform public.finish_box_delivery_email(box,(second_claim->>'token')::uuid,'sent','test-id',null);
+ if public.claim_box_delivery_email(box,actor)->>'state'<>'sent' then raise exception 'Repetição após aceite';end if;
+end $$;
 do $$ begin
  if (select count(*) from smart_private.audit_log where action='picking.invoice')<>3 or
-    (select count(*) from smart_private.audit_log where action='physical_box.create')<>1 then
+    (select count(*) from smart_private.audit_log where action='physical_box.create')<>2 then
   raise exception 'Auditoria de NF ou criação idempotente incorreta';
  end if;
 end $$;

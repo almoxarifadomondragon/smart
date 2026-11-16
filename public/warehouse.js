@@ -63,7 +63,7 @@ export function invoiceBatchView(count){
 export function physicalListView(boxes){
  return boxes.length?boxes.map(b=>'<div class="list-item"><div><strong>'+esc(b.code)+' · '+esc(b.name)+'</strong><p>'+physicalStatus(b.status)+'</p></div><div class="actions"><button type="button" data-action="physical-consult" data-id="'+esc(b.id)+'">Consultar</button><button type="button" data-action="physical-select" data-id="'+esc(b.id)+'">Vincular</button></div></div>').join(''):'<p class="muted">Nenhuma caixa compatível encontrada.</p>';
 }
-export function physicalContentsView(result,{compact=false}={}){
+export function physicalContentsView(result,{compact=false,receipt=false}={}){
  const {box,documents,items,total_units}=result;
  const status=s=>s==='confirmed'?'Confirmado':'Em andamento';
  const open=(id,number)=>'<button class="ghost" type="button" data-action="open" data-id="'+esc(id)+'">#'+pad(number)+'</button>';
@@ -73,12 +73,40 @@ export function physicalContentsView(result,{compact=false}={}){
   (compact?'':'<div class="actions"><button data-action="physical-label">Gerar etiqueta permanente</button>'+
   (box.can_close?'<button data-action="physical-close">Fechar caixa</button>':'')+'</div>')+'</div><div class="card-body">'+
   '<p><strong>'+documents.length+'</strong> romaneio(s) · <strong>'+items.length+'</strong> registro(s) BMA · <strong>'+formatQty(total_units)+'</strong> unidades registradas</p>'+
-  '<p class="notice">Histórico de materiais registrados e associados à caixa. Estas quantidades não representam o saldo físico atual.</p>'+
+  (receipt?'':'<p class="notice">Histórico de materiais registrados e associados à caixa. Estas quantidades não representam o saldo físico atual.</p>')+
   '<div class="actions">'+documents.map(d=>'<span>'+ (compact?'#'+pad(d.number):open(d.id,d.number))+' · '+status(d.status)+'</span>').join('')+'</div>'+
   '<div class="table-wrap"><table><thead><tr><th>BMA</th><th>Qtd.</th><th>Nota Fiscal</th><th>Pedido</th><th>Item do pedido</th><th>Romaneio</th><th>Data/hora da separação</th><th>Almoxarife</th></tr></thead><tbody>'+
   items.map(i=>'<tr><td class="code">'+esc(i.code)+'</td><td>'+formatQty(i.qty)+'</td><td>'+esc(i.invoice_number||'—')+'</td><td>'+esc(i.purchase_order||'—')+'</td><td>'+esc(i.purchase_order_item||'—')+'</td><td>'+
-   (compact?'#'+pad(i.document_number):open(i.document_id,i.document_number))+'</td><td>'+esc(date(i.created_at||i.scanned_at))+'</td><td>'+esc(i.operator||'—')+'</td></tr>').join('')+
+   (compact?'#'+pad(i.document_number):open(i.document_id,i.document_number))+'</td><td>'+esc(date(i.scanned_at||i.created_at))+'</td><td>'+esc(i.operator||'—')+'</td></tr>').join('')+
   '</tbody></table></div>'+(!items.length?'<p class="empty">Nenhum material associado.</p>':'')+'</div></section>';
+}
+const deliveryDate = value => value ? new Date(value).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : '—';
+const emailStates = {pending:'Aguardando envio',sending:'Em envio',sent:'Aceito pelo Gmail',failed:'Falha no envio',uncertain:'Resultado incerto'};
+
+export function deliveryStatusView(delivery,{admin=false}={}){
+ if(!delivery)return '<p class="notice">Caixa fechada. O fechamento histórico não possui comprovante de entrega.</p>';
+ const {email_state:state,snapshot}=delivery;
+ return '<section class="card"><div class="card-body"><h2>Caixa fechada — Entrega registrada</h2>'+
+  '<p>'+esc(delivery.closed_by_name)+' · '+esc(deliveryDate(delivery.closed_at))+'</p>'+
+  '<p>'+snapshot.documents.length+' romaneio(s) · '+snapshot.items.length+' registros BMA · '+formatQty(snapshot.total_units)+' unidades</p>'+
+  (state?'<p>E-mail: <strong>'+esc(emailStates[state])+'</strong></p>':'')+
+  '<div class="actions"><button data-action="physical-receipt">Comprovante de entrega</button>'+
+  (state?'<button data-action="physical-refresh">Atualizar estado do e-mail</button>':'')+
+  (['pending','failed'].includes(state)?'<button data-action="physical-send">'+(state==='failed'?'Reenviar e-mail':'Enviar e-mail')+'</button>':'')+
+  (state==='uncertain'&&admin?'<button data-action="physical-reconcile">Conferir resultado no Gmail</button>':'')+
+  '</div></div></section>';
+}
+export function deliveryReceiptView(delivery){
+ const {snapshot,closed_by_name,closed_at}=delivery;
+ const manifests=snapshot.documents.map(doc=>'<tr><td>#'+pad(doc.number)+'</td><td>'+esc(doc.responsible||'—')+
+  '</td><td>'+esc(deliveryDate(doc.confirmed_at))+'</td><td>'+esc(doc.item_count??'—')+'</td><td>'+formatQty(doc.total_units??0)+'</td></tr>').join('');
+ return '<article class="delivery-receipt"><img src="./logo.png" width="160" alt="Mondragon Assembly">'+
+  '<h2>Comprovante de entrega à Produção</h2><p>Entrega declarada por '+esc(closed_by_name)+' em '+esc(deliveryDate(closed_at))+
+  ' (horário de São Paulo).</p><h3>Romaneios vinculados</h3><div class="table-wrap"><table><thead><tr>'+
+  '<th>Romaneio</th><th>Responsável</th><th>Confirmação</th><th>Registros BMA</th><th>Unidades</th>'+
+  '</tr></thead><tbody>'+manifests+'</tbody></table></div>'+physicalContentsView({
+   ...snapshot,documents:snapshot.documents.map(doc=>({...doc,status:'confirmed'}))
+  },{compact:true,receipt:true})+'</article>';
 }
 export function physicalLabelView(box,base,qrCode,demo=false){
  const url=physicalBoxLink(base,box.id,demo);
