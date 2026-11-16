@@ -106,3 +106,11 @@ test('Comprovante mantém origem e NF; histórico antigo e envio incerto têm a�
  assert.match(deliveryStatusView(uncertain,{admin:true}),/physical-reconcile/);
  assert.match(deliveryStatusView(null),/histórico não possui comprovante/);
 });
+
+test('Consulta de entrega não oferece envio, reenvio ou reconciliação ao Leitor',()=>{
+ for(const email_state of ['pending','failed','sent','uncertain']){
+  const view=deliveryStatusView({...delivery,email_state,last_attempt_id:id},{operate:false});
+  assert.match(view,/physical-receipt/);
+  assert.doesNotMatch(view,/physical-send|physical-resend|physical-reconcile/);
+ }
+});

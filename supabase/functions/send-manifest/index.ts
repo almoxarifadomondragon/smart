@@ -31,11 +31,12 @@ Deno.serve(async req => {
   if(!auth.ok)return result({message:'Sessão inválida ou expirada'},401);
   const user=await auth.json();
   const {id,action}=await req.json();
+  const membership=await fetch(url+'/rest/v1/app_members?select=role&active=eq.true&user_id=eq.'+user.id,{headers:{apikey:key,Authorization:authorization}});
+  if(!membership.ok)return result({message:'Acesso negado'},403);
+  const [member]=await membership.json();
+  if(!['admin','operator'].includes(member?.role))return result({message:'Operação permitida apenas a administradores e operadores ativos.'},403);
   if(action==='verify') {
-   const membership=await fetch(url+'/rest/v1/app_members?select=role&active=eq.true&user_id=eq.'+user.id,{headers:{apikey:key,Authorization:authorization}});
-   if(!membership.ok)return result({message:'Acesso negado'},403);
-   const members=await membership.json();
-   if(members[0]?.role!=='admin')return result({message:'Somente administradores podem testar a conexão.'},403);
+   if(member.role!=='admin')return result({message:'Somente administradores podem testar a conexão.'},403);
    const gmail=gmailTransport();
    if(!gmail)return result({message:'Configure GMAIL_USER e GMAIL_APP_PASSWORD nos segredos do Supabase.'},503);
    try {await gmail.transport.verify();return result({verified:true,message:'Conexão com Gmail autenticada. Nenhum e-mail foi enviado.'});}
@@ -55,7 +56,7 @@ Deno.serve(async req => {
   if(!Array.isArray(doc.email_recipients)||doc.email_recipients.length<1||doc.email_recipients.length>91)return result({message:'Destinatários não cadastrados'},409);
   const claimed=await fetch(url+'/rest/v1/rpc/claim_manifest_email',{method:'POST',headers:{apikey:key,Authorization:authorization,'Content-Type':'application/json'},body:JSON.stringify({p_id:id})});
   const claim=await claimed.json();
-  if(!claimed.ok)return result({message:claim.message||'Não foi possível reservar o envio.'},409);
+  if(!claimed.ok)return result({message:claim.message||'Não foi possível reservar o envio.'},claim.code==='42501'?403:409);
   if(claim.sent)return result({sent:true});
   if(claim.blocked)return result({message:claim.message},409);
   if(!claim.token||!claim.document)return result({message:'Reserva de envio inválida.'},502);

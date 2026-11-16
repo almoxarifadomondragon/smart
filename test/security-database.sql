@@ -40,7 +40,7 @@ begin
  begin
   perform public.create_picking('X','Y');
  exception when others then
-  if sqlerrm='Usuário não autorizado no almoxarifado.' then rejected:=true; else raise; end if;
+  if sqlstate='42501' then rejected:=true; else raise; end if;
  end;
  if not rejected then raise exception 'Usuário sem vínculo criou documento'; end if;
  perform set_config('request.jwt.claim.sub',owner_uid,true);

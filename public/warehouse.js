@@ -85,7 +85,7 @@ const emailStates = {pending:'Aguardando envio',sending:'Em envio',sent:'Aceito 
 
 export const deliveryEmailLabel = state => emailStates[state];
 
-export function deliveryStatusView(delivery,{admin=false}={}){
+export function deliveryStatusView(delivery,{admin=false,operate=true}={}){
  if(!delivery)return '<p class="notice">Caixa fechada. O fechamento histórico não possui comprovante de entrega.</p>';
  const {email_state:state,snapshot}=delivery;
  return '<section class="card"><div class="card-body"><h2>Caixa fechada — Entrega registrada</h2>'+
@@ -94,9 +94,9 @@ export function deliveryStatusView(delivery,{admin=false}={}){
   (state?'<p>E-mail: <strong>'+esc(deliveryEmailLabel(state))+'</strong></p>':'')+
   '<div class="actions"><button data-action="physical-receipt">Comprovante de entrega</button>'+
   (state?'<button data-action="physical-refresh">Atualizar estado do e-mail</button>':'')+
-  (['pending','failed'].includes(state)?'<button data-action="physical-send">'+(state==='failed'?'Reenviar e-mail':'Enviar e-mail')+'</button>':'')+
-  (state==='sent'&&delivery.last_attempt_id?'<button data-action="physical-resend">Reenviar recibo por e-mail</button>':'')+
-  (state==='uncertain'&&admin?'<button data-action="physical-reconcile">Conferir resultado no Gmail</button>':'')+
+  (operate&&['pending','failed'].includes(state)?'<button data-action="physical-send">'+(state==='failed'?'Reenviar e-mail':'Enviar e-mail')+'</button>':'')+
+  (operate&&state==='sent'&&delivery.last_attempt_id?'<button data-action="physical-resend">Reenviar recibo por e-mail</button>':'')+
+  (state==='uncertain'&&operate&&admin?'<button data-action="physical-reconcile">Conferir resultado no Gmail</button>':'')+
   '</div></div></section>';
 }
 export function deliveryReceiptView(delivery){

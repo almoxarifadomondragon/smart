@@ -10,11 +10,11 @@ import * as domain from '../public/domain.js';
 import * as warehouse from '../public/warehouse.js';
 import {boxDetails,boxRoute,physicalBoxRoute,physicalBoxLink} from '../public/labels.js';
 const doc=(id,owner,number)=>({id,owner_id:owner,number,status:'draft',project:'25024',station:'31133',responsible:'Operador '+owner,created_at:'2026-10-26T12:00:00Z',boxes:[{id:'box-'+id,name:'Caixa 01'}],items:[]});
-function app(actor,server){
+function app(actor,server,role='operator'){
  const listeners={},calls=[],elements={'#app':{innerHTML:''},'#page':{innerHTML:'',querySelector:selector=>selector==='#box-search-filters'?{}:null,querySelectorAll:()=>[]},'#modal':{open:false,addEventListener(){},querySelector(){return null;}},'#toast':{classList:{add(){},remove(){}}},'#login-form':{},'#email':{value:actor},'#password':{value:'test-only'},'#scan-form':{},'#project':{},'#station':{},'#login-error':{}};
  elements['#login-form'].querySelector=()=>({});elements['#modal'].showModal=function(){this.open=true;};elements['#modal'].close=function(){this.open=false;};
  Object.assign(elements,{'#new-form':{},'#new-project':{value:'25024'},'#new-station':{value:'31133'},'#scan-code':{focus(){}}});
- const api={setSession(){},login:async()=>({user:{id:actor}}),getMembership:async()=>({full_name:'Operador '+actor,role:'operator'}),getManagers:async()=>[],getRecipients:async()=>[],listDocuments:async()=>{throw new Error('Bulk history load forbidden');},searchDocuments:async p=>history.searchDemo([...server.values()],p),getDocument:async id=>{calls.push(id);return structuredClone(server.get(id));},saveDocument:async d=>{access.assertEditable(server.get(d.id),actor);server.set(d.id,structuredClone(d));return structuredClone(d);}};
+ const api={setSession(){},login:async()=>({user:{id:actor}}),getMembership:async()=>({full_name:'Usuário '+actor,role}),getManagers:async()=>[],getRecipients:async()=>[],listDocuments:async()=>{throw new Error('Bulk history load forbidden');},searchDocuments:async p=>history.searchDemo([...server.values()],p),getDocument:async id=>{calls.push(id);return structuredClone(server.get(id));},saveDocument:async d=>{access.assertEditable(server.get(d.id),actor);server.set(d.id,structuredClone(d));return structuredClone(d);}};
  api.getDashboard=async()=>({drafts:[...server.values()].filter(d=>d.status==='draft').map(history.documentSummary),totals:history.dashboardTotals([...server.values()])});
  api.createDocument=async(project,station)=>{const next=doc('new-'+actor,actor,Math.max(...[...server.values()].map(d=>d.number))+1);Object.assign(next,{project,station});server.set(next.id,structuredClone(next));return next;};
  const context={...boxes,...history,...access,...domain,...warehouse,boxDetails,boxRoute,physicalBoxRoute,physicalBoxLink,api,document:{body:{setAttribute(){},removeAttribute(){}},querySelector:s=>elements[s]||null,addEventListener:(event,fn)=>{listeners[event]=fn;}},window:{history:{replaceState(){}},addEventListener(){}},location:{hash:'',pathname:'/smart/',search:''},clearTimeout(){},setTimeout(){},console,structuredClone};
@@ -106,4 +106,22 @@ test('Menu Caixas Físicas volta da consulta com os filtros e a página aplicada
  assert.equal(calls.at(-1).p_project,'0004567');
  assert.equal(calls.at(-1).p_page,2);
  assert.match(client.elements['#page'].innerHTML,/Página 2 de 2/);
+});
+
+test('Leitor dono do rascunho vê consulta e exportações, sem ações operacionais',async()=>{
+ const own=doc('ac000000-0000-4000-8000-000000000001','A',151);
+ const client=app('A',new Map([[own.id,own]]),'reader');
+ await client.login();
+ assert.match(client.elements['#app'].innerHTML,/Perfil: Leitor/);
+ assert.doesNotMatch(client.elements['#app'].innerHTML,/data-view="picking"|data-view="settings"|data-action="new"/);
+ await client.click({action:'open',id:own.id});
+ assert.match(client.elements['#app'].innerHTML,/Separação em andamento — Somente consulta/);
+ assert.match(client.elements['#app'].innerHTML,/data-action="download"/);
+ assert.match(client.elements['#app'].innerHTML,/data-action="print"/);
+ assert.match(client.elements['#app'].innerHTML,/data-action="label"/);
+ assert.doesNotMatch(client.elements['#app'].innerHTML,/data-action="confirm"|data-action="edit-item"|id="scan-form"/);
+ await client.click({action:'new'});
+ await client.click({view:'settings'});
+ assert.equal(client.run('view'),'picking');
+ assert.throws(()=>access.assertEditable(own,'A',false,'reader'),/somente para consulta/);
 });

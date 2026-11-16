@@ -14,7 +14,7 @@ function harness(){
   get isConnected(){return page.panel===this;}
  }
  const api={previewRecipients:(id,additional,reason)=>new Promise((resolve,reject)=>calls.push({id,additional:[...additional],reason,resolve,reject}))};
- const source=fs.readFileSync(new URL('../public/administration.js',import.meta.url),'utf8').replace("import * as api from './api.js';",'').replaceAll('export ','');
+ const source=fs.readFileSync(new URL('../public/administration.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replaceAll('export ','');
  const context={api,document:{createElement:()=>new Panel(),querySelector:s=>s==='#page'?page:s==='[data-action="confirm"]'?confirm:null},console,structuredClone};
  vm.runInNewContext(source+'\nthis.review=reviewRecipients;this.approval=recipientApproval;',context);
  const doc={id:'race',project:'P'},ctx={demo:false,admin:false,recipients:[],managers:[]};

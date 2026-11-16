@@ -55,7 +55,7 @@ async function manage(body,options={}){
 test('manage-users: exige sessão válida e administrador ativo',async()=>{
  assert.equal((await manage({action:'list'},{noAuth:true})).status,401);
  assert.equal((await manage({action:'list'},{expired:true})).status,401);
- for(const opts of [{role:'operator'},{inactive:true}]){const r=await manage({action:'invite'},opts);assert.equal(r.status,403);assert.ok(!r.calls.some(c=>c.url.includes('/invite?')));}
+ for(const opts of [{role:'operator'},{role:'reader'},{inactive:true}]){const r=await manage({action:'invite'},opts);assert.equal(r.status,403);assert.ok(!r.calls.some(c=>c.url.includes('/invite?')));}
 });
 test('manage-users: convite cria identidade e vincula UUID com credencial apenas do servidor',async()=>{
  const r=await manage({action:'invite',email:'new@example.com',full_name:'Novo usuário',role:'operator'});
@@ -68,4 +68,11 @@ test('manage-users: falha intermediária bloqueia identidade órfã e registra r
  assert.ok(r.calls.some(c=>c.url.includes('/admin/users/new-user-id')&&c.body.ban_duration));
  assert.ok(r.calls.some(c=>c.url.includes('/fail_user_invite')));
  const auth=await manage({action:'invite'},{authFailure:true});assert.equal(auth.status,409);assert.ok(!auth.calls.some(c=>c.url.includes('/complete_user_invite')));
+});
+
+test('Admin pode selecionar Leitor e encaminhar o perfil ao fluxo de convite',async()=>{
+ assert.match(settingsView({admin:true,demo:false,recipients:[],managers:[]}),/<option value="reader">Leitor/);
+ const result=await manage({action:'invite',email:'new@example.com',full_name:'Novo Leitor',role:'reader'});
+ assert.equal(result.status,200);
+ assert.equal(result.calls.find(call=>call.url.includes('/prepare_user_invite')).body.p_role,'reader');
 });

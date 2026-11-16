@@ -68,3 +68,11 @@ test('Gmail: Nota Fiscal por item preserva zeros, escapa texto e aceita document
  assert.match(r.mail.html,/<td>&lt;NF&gt;<\/td>/);
  assert.match(r.mail.html,/<td>—<\/td>/);
 });
+
+test('Gmail: Leitor não envia nem recebe aceite de um envio anterior',async()=>{
+ for(const email_status of ['pending','sent']){
+  const attempt=await run({id},{role:'reader',doc:{email_status}});
+  assert.equal(attempt.status,403);
+  assert.equal(attempt.mail,undefined);
+ }
+});
