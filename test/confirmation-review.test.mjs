@@ -8,12 +8,12 @@ function harness(){
  const calls=[],confirm={disabled:false},page={append(p){this.panel=p;}},panels=[];
  class Panel {
   constructor(){this.controls={};this.inputs=[];panels.push(this);}
-  set innerHTML(html){this.html=html;this.inputs=[...html.matchAll(/data-additional="(\d+)"[^>]*value="([^"]*)"/g)].map(m=>({value:m[2]}));this.controls={};}
+  set innerHTML(html){this.html=html;this.inputs=[...html.matchAll(/data-additional="(\d+)"[^>]*value="([^"]*)"/g)].map(m=>({value:m[2]}));this.controls={};this.controls['[name="material_eletrico"]']={checked:/name="material_eletrico"[^>]*checked/.test(html)};}
   querySelector(s){if(s==='[name="exception"]')return null;if(s==='[name="reason"]')return {value:''};return this.controls[s]||=( {} );}
   querySelectorAll(s){if(s==='[data-additional]')return this.inputs;if(s==='[data-remove-additional]')return this.inputs.map((_,i)=>({dataset:{removeAdditional:String(i)}}));return [];}
   get isConnected(){return page.panel===this;}
  }
- const api={previewRecipients:(id,additional,reason)=>new Promise((resolve,reject)=>calls.push({id,additional:[...additional],reason,resolve,reject}))};
+ const api={previewRecipients:(id,additional,reason,material_eletrico)=>new Promise((resolve,reject)=>calls.push({id,additional:[...additional],reason,material_eletrico,resolve,reject}))};
  const source=fs.readFileSync(new URL('../public/administration.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'').replaceAll('export ','');
  const context={api,document:{createElement:()=>new Panel(),querySelector:s=>s==='#page'?page:s==='[data-action="confirm"]'?confirm:null},console,structuredClone};
  vm.runInNewContext(source+'\nthis.review=reviewRecipients;this.approval=recipientApproval;',context);
@@ -87,4 +87,25 @@ test('mensagens distinguem alteração de destinatários, cadastro pendente e fa
  assert.equal(confirmationFailure({code:'P4091'}).kind,'changed');
  assert.equal(confirmationFailure({code:'P4221',message:'Gestor ausente'}).kind,'registry');
  assert.equal(confirmationFailure(new Error('Sem rede')).kind,'technical');
+});
+
+test('Material Elétrico inicia desmarcado, invalida aprovação e preserva escolha no mesmo documento',async()=>{
+ const h=harness(),initial=h.start();assert.equal(h.calls[0].material_eletrico,false);h.calls[0].resolve(snapshot('normal',['p@example.com']));await initial;
+ const checkbox=h.page.panel.querySelector('[name="material_eletrico"]');checkbox.checked=true;h.page.panel.oninput();
+ const checking=checkbox.onchange();assert.equal(h.calls[1].material_eletrico,true);assert.throws(h.approval,/Confira/);
+ h.calls[1].resolve({...snapshot('electric',['p@example.com','e@example.com']),to:['p@example.com'],cc:['e@example.com'],material_eletrico:true});await checking;
+ assert.equal(h.approval().material_eletrico,true);assert.deepEqual([...h.approval().cc],['e@example.com']);
+ const back=h.start();assert.equal(h.calls[2].material_eletrico,true);h.calls[2].resolve({...snapshot('again',['p@example.com','e@example.com']),to:['p@example.com'],cc:['e@example.com'],material_eletrico:true});await back;
+ assert.equal(h.approval().material_eletrico,true);
+});
+test('Demonstração bloqueia Elétrica sem cadastro e deduplica cópia dos destinatários principais',async()=>{
+ const h=harness();h.ctx.demo=true;h.ctx.recipients=[{role:'PCP',email:'p@example.com'},{role:'Almoxarifado',email:'a@example.com'}];h.ctx.managers=[{project_code:'P',active:true,email:'g@example.com'}];await h.start();
+ let checkbox=h.page.panel.querySelector('[name="material_eletrico"]');checkbox.checked=true;await checkbox.onchange();assert.throws(h.approval,/Confira/);assert.match(h.page.panel.html,/Nenhum destinatário da Elétrica/);
+ h.ctx.recipients.push({role:'Elétrica',email:' P@EXAMPLE.COM '},{role:'Elétrica',email:'e@example.com'});
+ checkbox=h.page.panel.querySelector('[name="material_eletrico"]');checkbox.checked=true;await checkbox.onchange();assert.deepEqual([...h.approval().cc],['e@example.com']);assert.equal(h.approval().emails.length,4);
+});
+
+test('Material Elétrico rejeita prévia legada que não comprove a classificação no servidor',async()=>{
+ const h=harness(),initial=h.start();h.calls[0].resolve(snapshot('base',['p@example.com']));await initial;
+ const checkbox=h.page.panel.querySelector('[name="material_eletrico"]');checkbox.checked=true;const checking=checkbox.onchange();h.calls[1].resolve(snapshot('legacy',['p@example.com']));await checking;assert.throws(h.approval,/Confira/);assert.match(h.page.panel.html,/Atualize a página/);assert.equal(h.confirm.disabled,true);
 });

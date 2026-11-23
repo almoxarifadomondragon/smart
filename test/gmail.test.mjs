@@ -49,7 +49,7 @@ test('Gmail: gestor e vários adicionais vêm da cópia do servidor, com dedupli
 test('Gmail: múltiplos fixos e até 91 destinatários congelados; rejeita excesso e ignora lista do cliente',async()=>{
  const emails=Array.from({length:91},(_,i)=>`r${i}@example.com`);
  const r=await run({id,to:['intruso@example.com']},{doc:{email_recipients:emails}});assert.equal(r.status,200);assert.deepEqual(Array.from(r.mail.to),emails);assert.equal(r.patch.email_status,'sent');
- const tooMany=await run({id},{doc:{email_recipients:[...emails,'overflow@example.com']}});assert.equal(tooMany.status,409);assert.equal(tooMany.mail,undefined);
+ const tooMany=await run({id},{doc:{email_recipients:Array.from({length:122},(_,i)=>'overflow'+i+'@example.com')}});assert.equal(tooMany.status,409);assert.equal(tooMany.mail,undefined);
  const six=['p1@example.com','p2@example.com','a1@example.com','a2@example.com','gestor@example.com','extra@example.com'];assert.deepEqual(Array.from((await run({id},{doc:{email_recipients:six}})).mail.to),six);
 });
 test('Gmail: trava impede segunda chamada e falha parcial ou timeout exige reconciliação',async()=>{
@@ -74,5 +74,20 @@ test('Gmail: Leitor não envia nem recebe aceite de um envio anterior',async()=>
   const attempt=await run({id},{role:'reader',doc:{email_status}});
   assert.equal(attempt.status,403);
   assert.equal(attempt.mail,undefined);
+ }
+});
+
+test('Gmail: Elétrica usa CC congelado, remove duplicação em To e ignora destinatários do cliente',async()=>{
+ const to=['pcp@example.com','alm@example.com','gestor@example.com','extra@example.com'],cc=['electric@example.com','pcp@example.com'];
+ const snapshot={material_eletrico:true,to,cc,electrical:['electric@example.com','pcp@example.com']};
+ const r=await run({id,material_eletrico:false,cc:['intruso@example.com']},{doc:{material_eletrico:true,email_recipients:[...to,'electric@example.com'],recipient_snapshot:snapshot}});
+ assert.equal(r.status,200);assert.deepEqual(Array.from(r.mail.to),to);assert.deepEqual(Array.from(r.mail.cc),['electric@example.com']);
+ const no=await run({id,material_eletrico:true,cc:['intruso@example.com']},{doc:{material_eletrico:false,email_recipients:to}});assert.equal(no.status,200);assert.equal(no.mail.cc,undefined);
+ const maxTo=Array.from({length:91},(_,i)=>'normal'+i+'@example.com'),maxCC=Array.from({length:30},(_,i)=>'electric'+i+'@example.com');
+ const max=await run({id},{doc:{material_eletrico:true,email_recipients:[...maxTo,...maxCC],recipient_snapshot:{material_eletrico:true,to:maxTo,cc:maxCC,electrical:maxCC}}});assert.equal(max.status,200);assert.equal(max.mail.cc.length,30);
+});
+test('Gmail: snapshot elétrico inconsistente bloqueia SMTP e registra falha recuperável',async()=>{
+ for(const snapshot of [null,{material_eletrico:true,to:['recipient@example.com'],cc:['intruso@example.com'],electrical:['other@example.com']}]){
+ const r=await run({id},{doc:{material_eletrico:true,recipient_snapshot:snapshot}});assert.equal(r.status,409);assert.equal(r.mail,undefined);assert.equal(r.patch.email_status,'failed');
  }
 });

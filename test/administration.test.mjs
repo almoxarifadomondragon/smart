@@ -22,12 +22,12 @@ test('fixos múltiplos: duas áreas, terceiro, edição e remoção sem duplicat
  for(const bad of [initial.filter(r=>r.role==='PCP'),[...initial,{role:'PCP',email:'p1@example.com'}],initial.map((r,i)=>i? r:{...r,email:'bad'}),initial.map((r,i)=>i? r:{...r,email:''}),[...initial,{role:'Gestor',email:'g@example.com'}]])assert.throws(()=>normalizeFixedRecipients(bad));
  const both=normalizeFixedRecipients([{role:'PCP',email:'same@example.com'},{role:'Almoxarifado',email:' SAME@EXAMPLE.COM '}]);assert.equal(both.length,2);assert.equal(normalizeEmails(both.map(r=>r.email)).length,1);
  const maximum=['PCP','Almoxarifado'].flatMap(role=>Array.from({length:30},(_,i)=>({role,email:`${role.toLowerCase()}${i}@example.com`})));assert.equal(normalizeFixedRecipients(maximum).length,60);
- assert.throws(()=>normalizeFixedRecipients([...maximum,{role:'PCP',email:'overflow@example.com'}]));assert.equal(EFFECTIVE_RECIPIENT_LIMIT,91);
+ assert.throws(()=>normalizeFixedRecipients([...maximum,{role:'PCP',email:'overflow@example.com'}]));assert.equal(EFFECTIVE_RECIPIENT_LIMIT,121);
 });
 
 test('fixos múltiplos: cada endereço tem campo e controles são exclusivos do administrador',()=>{
  const recipients=[{role:'PCP',email:'p1@example.com'},{role:'PCP',email:'p2@example.com'},{role:'Almoxarifado',email:'a1@example.com'},{role:'Almoxarifado',email:'a2@example.com'}];
- const admin=settingsView({admin:true,demo:true,recipients,managers:[]});assert.equal((admin.match(/data-fixed-email=/g)||[]).length,4);assert.equal((admin.match(/data-fixed-add=/g)||[]).length,2);assert.equal((admin.match(/data-fixed-remove=/g)||[]).length,4);
+ const admin=settingsView({admin:true,demo:true,recipients,managers:[]});assert.equal((admin.match(/data-fixed-email=/g)||[]).length,4);assert.equal((admin.match(/data-fixed-add=/g)||[]).length,3);assert.equal((admin.match(/data-fixed-remove=/g)||[]).length,4);
  const operator=settingsView({admin:false,demo:false,recipients,managers:[]});for(const r of recipients)assert.ok(operator.includes(r.email));assert.ok(!operator.includes('data-fixed-add='));assert.ok(!operator.includes('data-fixed-remove='));assert.ok(!operator.includes('Salvar destinatários'));assert.equal((operator.match(/required readonly/g)||[]).length,4);
 });
 test('usuários e controles administrativos são invisíveis ao operador; entradas são escapadas',()=>{
@@ -76,3 +76,11 @@ test('Admin pode selecionar Leitor e encaminhar o perfil ao fluxo de convite',as
  assert.equal(result.status,200);
  assert.equal(result.calls.find(call=>call.url.includes('/prepare_user_invite')).body.p_role,'reader');
 });
+
+ test('Elétrica é opcional, valida até 30 e não altera as áreas obrigatórias',()=>{
+ const normal=[{role:'PCP',email:'p@example.com'},{role:'Almoxarifado',email:'a@example.com'}];
+ assert.equal(normalizeFixedRecipients(normal).length,2);
+ const maximum=Array.from({length:30},(_,i)=>({role:'Elétrica',email:'e'+i+'@example.com'}));
+ assert.equal(normalizeFixedRecipients([...normal,...maximum]).length,32);
+ for(const invalid of [[{role:'Elétrica',email:''}],[...maximum,{role:'Elétrica',email:'overflow@example.com'}],[{role:'Elétrica',email:' E@EXAMPLE.COM '},{role:'Elétrica',email:'e@example.com'}]])assert.throws(()=>normalizeFixedRecipients([...normal,...invalid]));
+ });
