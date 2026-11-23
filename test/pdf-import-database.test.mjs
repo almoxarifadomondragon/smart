@@ -18,7 +18,23 @@ test('PostgreSQL: transação, saldo entre lotes, idempotência, RLS, início e 
    create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
    insert into auth.users values('${admin}','admin@example.invalid'),('${operator}','operator@example.invalid'),('${reader}','reader@example.invalid');`);
   await db.exec(sql('supabase/schema.sql'));
-  for(const file of readdirSync(new URL('supabase/migrations/',root)).filter(n=>n.endsWith('.sql')).sort())await db.exec(sql('supabase/migrations/'+file));
+  const archiveBatch='0e837525-6131-405c-ad33-f9baa5d120c2';
+  let archiveSql;
+  for(const file of readdirSync(new URL('supabase/migrations/',root)).filter(n=>n.endsWith('.sql')).sort()){
+   if(file.endsWith('_archive_pdf_test_batch.sql')){
+    await db.query("insert into smart_private.pdf_import_batches(id,actor_id,state) values($1,$2,'cancelled')",[archiveBatch,operator]);
+    archiveSql=sql('supabase/migrations/'+file);
+   }
+   await db.exec(sql('supabase/migrations/'+file));
+  }
+  assert.ok((await db.query('select archived_at from smart_private.pdf_import_batches where id=$1',[archiveBatch])).rows[0].archived_at);
+  const archiveBlock=archiveSql.slice(archiveSql.indexOf('do $'),archiveSql.indexOf("notify pgrst"));
+  await db.exec(archiveBlock);
+  assert.equal((await db.query("select count(*)::int n from smart_private.audit_log where action='pdf.archive_test'")).rows[0].n,1);
+  await db.query("update smart_private.pdf_import_batches set archived_at=null,state='review' where id=$1",[archiveBatch]);
+  await assert.rejects(db.exec(archiveBlock),/não está cancelado/);
+  await db.query("update smart_private.pdf_import_batches set state='cancelled' where id=$1",[archiveBatch]);
+  await db.exec(archiveBlock);
   await db.exec(`insert into public.app_members(user_id,full_name,role) values('${admin}','Administrador','admin'),('${operator}','Operador','operator'),('${reader}','Leitor','reader');`);
   const actor=async id=>{await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('set role authenticated');};
   const rpc=async(name,args,types)=> (await db.query(`select to_jsonb(public.${name}(${args.map((_,i)=>'$'+(i+1)+'::'+types[i]).join(',')})) as value`,args)).rows[0].value;
