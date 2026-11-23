@@ -115,3 +115,9 @@ input.zero-quantity { border:2px solid #c9232b; }
  .pdf-import .pdf-review-next{align-items:stretch;flex-direction:column}
 }
 @media(max-width:520px){.pdf-edit-dialog .fields{grid-template-columns:1fr}.pdf-edit-dialog{padding:18px}}
+.electrical-choice{display:flex;align-items:center;gap:10px;padding:16px;background:#fff5f5;border:1px solid #eed2d5;border-radius:8px;margin:18px 0 8px;font-size:15px;cursor:pointer}
+.electrical-choice input{width:22px;height:22px;flex:none;accent-color:var(--red)}
+#recipient-review{min-width:0;overflow-wrap:anywhere;margin:18px}
+#recipient-review #electrical-help{font-size:14px;color:#545b67;line-height:1.6}
+#recipient-review .card-body>p,#recipient-review .card-body>ul{overflow-wrap:anywhere}
+@media(max-width:520px){#recipient-review{margin:10px}.electrical-choice{padding:12px}}

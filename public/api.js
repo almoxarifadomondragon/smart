@@ -29,11 +29,11 @@ export const getBoxDelivery = id => request('/rest/v1/rpc/get_box_delivery','POS
 export const closePhysicalBox = (id,review,reason,observations) => request('/rest/v1/rpc/close_physical_box','POST',{p_id:id,p_expected:review.fingerprint,p_reason:reason,p_observations:observations});
 export const sendBoxDelivery = (id,resend) => request('/functions/v1/send-box-delivery','POST',{id,...resend});
 export const reconcileBoxDelivery = (id,sent,note) => request('/rest/v1/rpc/reconcile_box_delivery_email','POST',{p_id:id,p_sent:sent,p_note:note});
-export const finalizeDocument = (id,approval) => request('/rest/v1/rpc/finalize_picking','POST',{p_id:id,p_additional:approval.additional,p_exception_reason:approval.reason,p_expected:approval.fingerprint});
+export const finalizeDocument = (id,approval) => request('/rest/v1/rpc/finalize_picking','POST',{p_id:id,p_additional:approval.additional,p_exception_reason:approval.reason,p_expected:approval.fingerprint,p_material_eletrico:approval.material_eletrico===true});
 export const sendManifest = id => request('/functions/v1/send-manifest','POST',{id});
 export const verifyGmail = () => request('/functions/v1/send-manifest','POST',{action:'verify'});
 export const getRecipients = () => request('/rest/v1/notification_recipients?select=role,email&order=role,email');
-export const saveRecipients = recipients => request('/rest/v1/rpc/set_recipients','POST',{p_recipients:recipients});
+export const saveRecipients = recipients => request('/rest/v1/rpc/set_recipients','POST',{p_recipients:recipients,p_include_electrical:true});
 
 export async function getMembership(userId) {
  const rows=await request('/rest/v1/app_members?select=user_id,full_name,role&active=eq.true&user_id=eq.'+encodeURIComponent(userId));
@@ -42,7 +42,7 @@ export async function getMembership(userId) {
 }
 export const getManagers=()=>request('/rest/v1/project_managers?select=*&order=project_code');
 export const saveManager=m=>request('/rest/v1/rpc/save_project_manager','POST',{p_id:m.id||null,p_project:m.project_code,p_email:m.email,p_active:m.active});
-export const previewRecipients=(id,additional,reason)=>request('/rest/v1/rpc/preview_recipients','POST',{p_id:id,p_additional:additional,p_exception_reason:reason||null});
+export const previewRecipients=(id,additional,reason,material_eletrico=false)=>request('/rest/v1/rpc/preview_recipients','POST',{p_id:id,p_additional:additional,p_exception_reason:reason||null,p_material_eletrico:material_eletrico});
 export const manageUsers=body=>request('/functions/v1/manage-users','POST',body);
 export const resolveEmail=(id,sent,note)=>request('/rest/v1/rpc/resolve_manifest_email','POST',{p_id:id,p_sent:sent,p_note:note});
 export const authUser=()=>request('/auth/v1/user');
