@@ -21,6 +21,23 @@ function gmailError(error: any) {
  if(['ETIMEDOUT','ESOCKET','ECONNECTION','EDNS'].includes(error?.code))return 'Não foi possível concluir a conexão segura com smtp.gmail.com:465. Se ocorreu durante o envio, confira Enviados no Gmail antes de tentar novamente.';
  return 'Gmail não confirmou o envio. Confira Enviados no Gmail antes de tentar novamente.';
 }
+// Routing comes exclusively from the snapshot locked by claim_manifest_email.
+function manifestRouting(doc: any) {
+ const clean=(values: unknown): string[]=>{
+  if(!Array.isArray(values)||values.some(v=>typeof v!=='string'))throw Error('Invalid snapshot');
+  const list=[...new Set(values.map(v=>v.trim().toLowerCase()))];
+  if(list.some(e=>e.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)))throw Error('Invalid address');
+  return list;
+ };
+ const all=clean(doc.email_recipients),snapshot=doc.recipient_snapshot;
+ if(!all.length||all.length>121)throw Error('Invalid recipients');
+ if(!doc.material_eletrico){if(snapshot?.cc?.length)throw Error('Unexpected CC');return {to:all,cc:[]};}
+ if(snapshot?.material_eletrico!==true)throw Error('Missing classification');
+ const to=clean(snapshot.to),cc=clean(snapshot.cc).filter(e=>!to.includes(e)),electrical=clean(snapshot.electrical);
+ const union=[...new Set([...to,...cc])];
+ if(!to.length||!electrical.length||electrical.length>30||cc.some(e=>!electrical.includes(e))||electrical.some(e=>!union.includes(e))||union.length!==all.length||all.some(e=>!union.includes(e)))throw Error('Invalid frozen routing');
+ return {to,cc};
+}
 Deno.serve(async req => {
  if(req.method==='OPTIONS') return new Response('ok',{headers:cors});
  if(req.method!=='POST')return result({message:'Método inválido'},405);
@@ -53,7 +70,7 @@ Deno.serve(async req => {
   if(doc.email_status==='sent')return result({sent:true});
   const gmail=gmailTransport();
   if(!gmail)return result({message:'Configure GMAIL_USER e GMAIL_APP_PASSWORD nos segredos do Supabase.'},503);
-  if(!Array.isArray(doc.email_recipients)||doc.email_recipients.length<1||doc.email_recipients.length>91)return result({message:'Destinatários não cadastrados'},409);
+  if(!Array.isArray(doc.email_recipients)||doc.email_recipients.length<1||doc.email_recipients.length>121)return result({message:'Destinatários não cadastrados'},409);
   const claimed=await fetch(url+'/rest/v1/rpc/claim_manifest_email',{method:'POST',headers:{apikey:key,Authorization:authorization,'Content-Type':'application/json'},body:JSON.stringify({p_id:id})});
   const claim=await claimed.json();
   if(!claimed.ok)return result({message:claim.message||'Não foi possível reservar o envio.'},claim.code==='42501'?403:409);
@@ -66,12 +83,14 @@ Deno.serve(async req => {
    const response=await fetch(url+'/rest/v1/rpc/finish_manifest_email',{method:'POST',headers:{apikey:key,Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({p_id:id,p_token:claim.token,p_state:state,p_provider:provider,p_code:code})});
    return response.ok;
   };
+  let routing;
+  try{routing=manifestRouting(doc);}catch{await finish('failed',null,'invalid_recipient_snapshot');gmail.transport.close();return result({message:'Destinatários congelados inconsistentes. Solicite conferência administrativa.'},409);}
   const number=String(doc.number).padStart(6,'0');
   const time=(v:string)=>new Date(v).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'});
   const html=`<div style="font-family:Arial,sans-serif;color:#282d36;max-width:900px"><h2 style="color:#cc2631">MONDRAGON ASSEMBLY</h2><h1>Romaneio digital #${number}</h1><p>Projeto: ${escapeHtml(doc.project)}<br>Estação: ${escapeHtml(doc.station)}<br>Responsável: ${escapeHtml(doc.responsible)}<br>Confirmado em: ${time(doc.confirmed_at)}<br>Itens: ${doc.items.length} · Caixas: ${doc.boxes.length}</p>${doc.boxes.map((box:any,index:number)=>`<h3>${escapeHtml(box.name)} · Caixa ${index+1}/${doc.boxes.length}</h3><table border="1" cellpadding="9" cellspacing="0" style="border-collapse:collapse;border-color:#eee"><thead><tr><th>BMA</th><th>Projeto</th><th>Estação</th><th>Qtd.</th><th>Nota Fiscal</th><th>Pedido</th><th>Item do pedido</th><th>Leitura</th><th>Almoxarife</th></tr></thead><tbody>${doc.items.filter((item:any)=>item.box===box.id).map((item:any)=>`<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.project)}</td><td>${escapeHtml(item.station)}</td><td>${Number(item.qty).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td>${escapeHtml(item.invoice_number||'—')}</td><td>${escapeHtml(item.purchase_order||'—')}</td><td>${escapeHtml(item.purchase_order_item||'—')}</td><td>${time(item.scanned_at)}</td><td>${escapeHtml(item.operator)}</td></tr>`).join('')}</tbody></table>`).join('')}<p style="color:#888;font-size:12px">Registro gerado pelo Almoxarifado Digital Mondragon.</p></div>`;
   let info;
   try {
-   info=await gmail.transport.sendMail({from:{name:'Mondragon',address:gmail.user},to:[...new Set(doc.email_recipients)],subject:`Romaneio #${number} — ${doc.project}`,html,messageId:`<romaneio-${id}@gmail.com>`});
+   info=await gmail.transport.sendMail({from:{name:'Mondragon',address:gmail.user},to:routing.to,...(routing.cc.length?{cc:routing.cc}:{}),subject:`Romaneio #${number} — ${doc.project}`,html,messageId:`<romaneio-${id}@gmail.com>`});
   }catch(error){await finish((error as any)?.code==='EAUTH'?'failed':'uncertain',null,(error as any)?.code==='EAUTH'?'auth_rejected':'smtp_uncertain');return result({message:gmailError(error)},502);}
   finally{gmail.transport.close();}
   if(info.rejected?.length){await finish('uncertain',info.messageId,'partial_rejection');return result({message:'Gmail recusou parte dos destinatários. Confira Enviados e solicite reconciliação antes de repetir o envio.'},502);}
