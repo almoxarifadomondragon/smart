@@ -2,13 +2,13 @@ const URL = 'https://qrcpprvxjgcnlxyushsg.supabase.co';
 const KEY = 'sb_publishable_r2eHPLJGxh7BDzq-kb1xSQ_uoWHRevl';
 let session;
 export const setSession = value => {session=value;};
-async function request(path,method='GET',body) {
+async function request(path,method='GET',body,form=false) {
   if(session?.expires_at && session.expires_at*1000 < Date.now()+60000 && !path.startsWith('/auth/v1/token')) {
     const refreshed = await fetch(URL+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token})});
     if(!refreshed.ok) throw new Error('Sua sessão expirou. Saia e entre novamente.');
     session = await refreshed.json();
   }
-  const response = await fetch(URL+path,{method,headers:{apikey:KEY,...(session?{Authorization:`Bearer ${session.access_token}`} : {}),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+  const response = await fetch(URL+path,{method,headers:{apikey:KEY,...(session?{Authorization:`Bearer ${session.access_token}`} : {}),...(!form?{'Content-Type':'application/json'}:{})},...(body?{body:form?body:JSON.stringify(body)}:{})});
   const data = await response.json().catch(()=>null);
   if (!response.ok) {const error=new Error(data?.msg || data?.message || data?.error_description || 'Não foi possível conectar ao Supabase.');error.code=data?.code;error.status=response.status;throw error;}
   return data;
@@ -48,3 +48,13 @@ export const resolveEmail=(id,sent,note)=>request('/rest/v1/rpc/resolve_manifest
 export const authUser=()=>request('/auth/v1/user');
 export const setPassword=password=>request('/auth/v1/user','PUT',{password});
 export const verifyPasswordLink=(token_hash,type)=>request('/auth/v1/verify','POST',{token_hash,type});
+export const beginPdfImport=id=>request('/rest/v1/rpc/begin_pdf_import','POST',{p_id:id});
+export const stagePdfOrder=(batch,file)=>{const form=new FormData();form.set('batch',batch);form.set('file',file);return request('/functions/v1/import-pdf-order','POST',form,true);};
+export const previewPdfImport=id=>request('/rest/v1/rpc/preview_pdf_import','POST',{p_id:id});
+export const confirmPdfImport=(id,selection)=>request('/rest/v1/rpc/confirm_pdf_import','POST',{p_id:id,p_selection:selection});
+export const startPdfPicking=id=>request('/rest/v1/rpc/start_pdf_picking','POST',{p_id:id});
+export const pdfImportHistory=(filters,page)=>request('/rest/v1/rpc/pdf_import_history','POST',{p_filters:filters,p_page:page});
+export const pdfOrderFile=id=>request('/functions/v1/import-pdf-order','POST',{file_id:id});
+export const cancelPdfImport=(id,reason)=>request('/rest/v1/rpc/cancel_pdf_import','POST',{p_id:id,p_reason:reason});
+export const reviewPdfOrderLine=(file,index,reason)=>request('/rest/v1/rpc/review_pdf_order_line','POST',{p_file:file,p_index:index,p_reason:reason});
+export const pdfImportDetails=id=>request('/rest/v1/rpc/pdf_import_details','POST',{p_id:id});

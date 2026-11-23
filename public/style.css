@@ -40,3 +40,5 @@ input.zero-quantity { border:2px solid #c9232b; }
  .box-search-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
  .box-search-row { align-items:flex-start; flex-direction:column; gap:8px; }
 }
+
+.pdf-drop{border:2px dashed #b6bcc4;padding:20px;border-radius:10px}.pdf-metrics{display:flex;flex-wrap:wrap;gap:18px;margin:20px 0}.pdf-metrics p{font-size:12px;min-width:90px}.pdf-metrics strong{display:block;font-size:23px}.pdf-import td input:not([type=checkbox]){min-width:100px;max-width:240px;width:100%}.pdf-import td small{display:block}.pdf-import .table-wrap{max-height:65vh}.pdf-import thead{position:sticky;top:0;background:white}.pdf-import input,.pdf-import select{padding:8px;border:1px solid #d8dce2;border-radius:4px}

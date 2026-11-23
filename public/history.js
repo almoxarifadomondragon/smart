@@ -21,7 +21,7 @@ export function dateRange(period,from='',to='',now=new Date()){
 export function searchParameters(filters,page=1,now=new Date(),scope='confirmed'){
  const number=filters.number.trim(),bma=filters.bma.trim().toUpperCase();
  if(number&&(!/^\d{1,30}$/.test(number)||BigInt(number)>9223372036854775807n))throw new Error('Informe apenas o número completo do romaneio.');
- if(bma&&!/^BMA\d{7}$/.test(bma))throw new Error('Informe o código BMA completo, por exemplo BMA0013617.');
+ if(bma&&!/^(BMA|BPZ)\d{7}$/.test(bma))throw new Error('Informe o código BMA ou BPZ completo, por exemplo BMA0013617.');
  const project=normalizeDestinationCode(filters.project),station=normalizeDestinationCode(filters.station);
  if(project.length>120||station.length>120)throw new Error('Projeto e estação devem ter até 120 caracteres.');
  const range=dateRange(filters.period,filters.from,filters.to,now);

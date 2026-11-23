@@ -3,5 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": {"start": "node server.mjs", "test": "node --test --test-isolation=none"}
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test --test-isolation=none",
+    "build:pdf-edge": "node scripts/build-pdf-edge.mjs",
+    "test:pdf-ui": "node scripts/pdf-import-harness.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
+    "esbuild": "0.25.12"
+  },
+  "packageManager": "pnpm@11.25.0"
 }

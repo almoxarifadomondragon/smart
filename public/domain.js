@@ -37,7 +37,7 @@ export const formatQty = value => Number(value).toLocaleString('pt-BR',{useGroup
 export const totalQty = items => items.reduce((sum,item)=>sum+Math.round(item.qty*100),0)/100;
 export function manifestCsv(doc) {
   const rows = [['Separação','BMA','Projeto','Estação','Quantidade','Pedido de compras','Item do pedido','Prefixo QR','Caixa','Leitura','Almoxarife','Nota Fiscal'],
-    ...doc.items.map(i=>[pad(doc.number),i.code,i.project,i.station,formatQty(i.qty),i.purchase_order||'',i.purchase_order_item||'',i.qr_prefix||'',doc.boxes.find(b=>b.id===i.box)?.name,new Date(i.scanned_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}),i.operator,i.invoice_number||''])];
+    ...doc.items.map(i=>[pad(doc.number),i.code,i.project,i.station,formatQty(i.qty),i.source_order||i.purchase_order||'',i.purchase_order_item||'',i.qr_prefix||'',doc.boxes.find(b=>b.id===i.box)?.name,new Date(i.scanned_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}),i.operator,i.invoice_number||''])];
   return '\ufeff'+rows.map(row=>row.map(v=>'"'+String(v??'').replace(/^[=+@-]/,"'$&").replace(/"/g,'""')+'"').join(';')).join('\r\n');
 }
 export function validatePurchase(order='',line='') {
@@ -46,7 +46,7 @@ export function validatePurchase(order='',line='') {
 }
 export function parseCode(raw) {
   const code = raw.trim().toUpperCase();
-  if (!/^BMA\d{7}$/.test(code)) throw new Error('Informe um código BMA seguido de 7 números. Ex.: BMA0001979.');
+  if (!/^(BMA|BPZ)\d{7}$/.test(code)) throw new Error('Informe um código BMA ou BPZ seguido de 7 números. Ex.: BMA0001979.');
   return code;
 }
 export function parseQR(raw) {

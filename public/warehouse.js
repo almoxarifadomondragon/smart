@@ -76,7 +76,7 @@ export function physicalContentsView(result,{compact=false,receipt=false}={}){
   (receipt?'':'<p class="notice">Histórico de materiais registrados e associados à caixa. Estas quantidades não representam o saldo físico atual.</p>')+
   '<div class="actions">'+documents.map(d=>'<span>'+ (compact?'#'+pad(d.number):open(d.id,d.number))+' · '+status(d.status)+'</span>').join('')+'</div>'+
   '<div class="table-wrap"><table><thead><tr><th>BMA</th><th>Qtd.</th><th>Nota Fiscal</th><th>Pedido</th><th>Item do pedido</th><th>Romaneio</th><th>Data/hora da separação</th><th>Almoxarife</th></tr></thead><tbody>'+
-  items.map(i=>'<tr><td class="code">'+esc(i.code)+'</td><td>'+formatQty(i.qty)+'</td><td>'+esc(i.invoice_number||'—')+'</td><td>'+esc(i.purchase_order||'—')+'</td><td>'+esc(i.purchase_order_item||'—')+'</td><td>'+
+  items.map(i=>'<tr><td class="code">'+esc(i.code)+'</td><td>'+formatQty(i.qty)+'</td><td>'+esc(i.invoice_number||'—')+'</td><td>'+esc(i.source_order||i.purchase_order||'—')+'</td><td>'+esc(i.purchase_order_item||'—')+'</td><td>'+
    (compact?'#'+pad(i.document_number):open(i.document_id,i.document_number))+'</td><td>'+esc(date(i.scanned_at||i.created_at))+'</td><td>'+esc(i.operator||'—')+'</td></tr>').join('')+
   '</tbody></table></div>'+(!items.length?'<p class="empty">Nenhum material associado.</p>':'')+'</div></section>';
 }
