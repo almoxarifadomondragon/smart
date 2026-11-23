@@ -80,6 +80,7 @@ export async function reviewRecipients(doc,ctx,options={}){
    else snapshot=await api.previewRecipients(doc.id,additional,reason,material_eletrico);
    if(revision!==state.revision||!panel.isConnected)return;
    if(!snapshot?.fingerprint||!Array.isArray(snapshot.emails))throw new Error('Falha técnica ao conferir destinatários. Tente conferir novamente.');
+   if(material_eletrico&&(snapshot.material_eletrico!==true||!Array.isArray(snapshot.to)||!Array.isArray(snapshot.cc)))throw new Error('Não foi possível validar Material Elétrico no servidor. Atualize a página e confira novamente.');
    state.approved={...snapshot,additional,reason,material_eletrico};
   }catch(error){if(revision!==state.revision||!panel.isConnected)return;state.error=error.code==='P4221'?'Cadastro de destinatários incompleto: '+error.message:error.message;}
   draw();const confirm=q('[data-action="confirm"]');if(confirm)confirm.disabled=!state.approved;
