@@ -42,3 +42,9 @@ test('documentos sem tabela, assinatura falsa e limite de tamanho são rejeitado
  await assert.rejects(readOrderPdf({name:'large.pdf',size:30*1024*1024}),/20 MB/);
  assert.deepEqual(textRows([{str:'B',transform:[1,0,0,1,80,20]},{str:'A',transform:[1,0,0,1,10,21]}]).map(r=>r.text),['A B']);
 });
+test('linha sem BPZ continua na conferência e quantidade com milhar é reconhecida',()=>{
+ const cell=(str,x,y)=>({str,transform:[8,0,0,8,x,y]});
+ const parsed=parseOrderPages([[cell('Pedido VH123',40,800),cell('Linha do Pedido DESCRIÇÃO Qtd',40,700),cell('1',49,650),cell('PEÇA SEM CÓDIGO',75,650),cell('1.234,50',375,650),cell('Fab. 01',75,635),cell('L:3 - 26005 - 31450 Plano: BP26005-31450-070 Rev: A',59,620)]]);
+ assert.equal(parsed.rows.length,1);assert.equal(parsed.rows[0].ordered,1234.5);assert.equal(parsed.rows[0].line,'3');assert.equal(parsed.rows[0].sequence,'1');
+ assert.ok(parsed.rows[0].errors.some(e=>e.includes('BPZ')));
+});

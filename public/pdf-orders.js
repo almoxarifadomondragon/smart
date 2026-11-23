@@ -11,7 +11,11 @@ export function textRows(items) {
  }
  return rows.sort((a,b)=>b.y-a.y).map(row=>({...row,cells:row.cells.sort((a,b)=>a.x-b.x),text:row.cells.sort((a,b)=>a.x-b.x).map(c=>c.text).join(' ').replace(/\s+/g,' ').trim()}));
 }
-const decimal = text => /^\d+(?:[.,]\d{1,2})?$/.test(text||'') ? Number(text.replace(',','.')) : null;
+const decimal = text => {
+ if(/^\d+(?:[.,]\d{1,2})?$/.test(text||''))return Number(text.replace(',','.'));
+ if(/^\d{1,3}(?:\.\d{3})+,\d{1,2}$/.test(text||''))return Number(text.replaceAll('.','').replace(',','.'));
+ return null;
+};
 const clean = value => String(value||'').trim();
 export function validateOrderRow(row) {
  const errors=[];
@@ -53,9 +57,13 @@ export function parseOrderPages(pages) {
    }
   }
   if(!/Linha do|Linha\s+do/i.test(all)||!/Pedido/.test(all)||!/DESCRI/i.test(all))continue;
-  const starts=lines.map((line,i)=>({line,i})).filter(({line})=>line.cells.some(c=>c.x>60&&c.x<355&&/^BPZ\d{7}\s*-/.test(c.text)));
+  const tableHeader=lines.findIndex(l=>/DESCRI/i.test(l.text));
+  const starts=lines.map((line,i)=>({line,i})).filter(({line,i})=>i>tableHeader&&(
+   line.cells.some(c=>c.x>60&&c.x<355&&/^BPZ\d{7}\s*-/.test(c.text))||
+   (line.cells.some(c=>c.x>=32&&c.x<60&&/^\d+$/.test(c.text))&&line.cells.some(c=>c.x>=60&&c.x<355))
+  ));
   for(const [position,start] of starts.entries()){
-   const codeCell=start.line.cells.find(c=>/^BPZ\d{7}\s*-/.test(c.text));
+   const codeCell=start.line.cells.find(c=>/^BPZ\d{7}\s*-/.test(c.text))||start.line.cells.find(c=>c.x>=60&&c.x<355);
    const block=lines.slice(start.i,starts[position+1]?.i??lines.length);
    const detail=block.find(l=>/L:\s*\d+/.test(l.text));
    const target=detail?.text.match(/L:\s*(\d+)\s*-\s*(\d+)\s*-\s*(\d+)/);
@@ -63,7 +71,7 @@ export function parseOrderPages(pages) {
    const descriptionEnd=block.findIndex(l=>/Fab\.|L:\s*\d+/.test(l.text));
    const descriptionCells=block.slice(0,descriptionEnd<0?1:descriptionEnd).flatMap(l=>l.cells.filter(c=>c.x>=codeCell.x&&c.x<355).map(c=>c.text)).join(' ');
    const quantity=start.line.cells.find(c=>c.x>=355&&c.x<398)?.text;
-   const row={order:result.order,sequence:start.line.cells.find(c=>c.x<60&&/^\d+$/.test(c.text))?.text||'',line:target?.[1]||detail?.text.match(/L:\s*(\d+)/)?.[1]||'',code:prefix[1],description:descriptionCells.replace(/^BPZ\d{7}\s*-\s*/,''),ordered:decimal(quantity),project:target?.[2]||'',station:target?.[3]||'',drawing:detail?.text.match(/Plano:\s*(\S+)/i)?.[1]||'',revision:detail?.text.match(/Rev:\s*(\S+)/i)?.[1]||'',due:detail?.text.match(/\d{2}\/\d{2}\/\d{4}/)?.[0]||'',page:index+1,warnings:[]};
+   const row={order:result.order,sequence:start.line.cells.find(c=>c.x<60&&/^\d+$/.test(c.text))?.text||'',line:target?.[1]||detail?.text.match(/L:\s*(\d+)/)?.[1]||'',code:prefix?.[1]||'',description:descriptionCells.replace(/^BPZ\d{7}\s*-\s*/,''),ordered:decimal(quantity),project:target?.[2]||'',station:target?.[3]||'',drawing:detail?.text.match(/Plano:\s*(\S+)/i)?.[1]||'',revision:detail?.text.match(/Rev:\s*(\S+)/i)?.[1]||'',due:detail?.text.match(/\d{2}\/\d{2}\/\d{4}/)?.[0]||'',page:index+1,warnings:[]};
    const detailQty=decimal(detail?.cells.find(c=>c.x>=355&&c.x<398)?.text);
    if(detailQty!==null&&detailQty!==row.ordered)row.warnings.push('Quantidade da linha difere do detalhamento');
    row.errors=validateOrderRow(row);

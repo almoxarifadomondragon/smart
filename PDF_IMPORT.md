@@ -46,7 +46,7 @@ Após o início, a separação segue os mesmos serviços de edição, revisão, 
 
 ## Testes executados
 
-Em 23/11/2026, a suíte ampliada executou 86 testes sem falhas e sem testes ignorados no computador com os documentos de referência disponíveis. O PostgreSQL de testes é PGlite em memória, com todos os schemas e migrações e identidades fictícias. A base operacional foi consultada apenas para verificar compatibilidade antes da implantação.
+Em 23/11/2026, a suíte ampliada executou 87 testes sem falhas e sem testes ignorados no computador com os documentos de referência disponíveis. O PostgreSQL de testes é PGlite em memória, com todos os schemas e migrações e identidades fictícias. A base operacional foi consultada apenas para verificar compatibilidade antes da implantação.
 
 | PDF | Páginas | Linhas |
 | --- | ---: | ---: |
@@ -86,6 +86,8 @@ Envio real de e-mail, impressão física, avaliação visual em tablet e importa
 
 Em 23/11/2026, as duas migrações incrementais foram aplicadas no projeto oficial `qrcpprvxjgcnlxyushsg`. A consulta posterior confirmou os mesmos 11 documentos existentes, hash preservado, quatro tabelas novas com RLS, bucket privado e execução de staging revogada para o navegador. A consulta de caixas reconhece BPZ e inclui a origem VH no conteúdo das caixas. A nova Edge Function foi publicada com JWT habilitado. Uma chamada sem autenticação retornou HTTP 401. Nenhum lote de pedido foi criado pela implantação, conforme a contagem de zero lotes no destino.
 
+O teste do painel Supabase também executou o runtime da função e recebeu a rejeição de sessão inválida esperada para uma credencial sem identidade de usuário. O workflow Pages inicial encontrou metadados de artefato indisponíveis e, na repetição, nomes duplicados. A correção separa build e deploy e passa o nome de artefato por execução/tentativa por meio do output do build. A execução corrigida `45196579359` terminou com sucesso.
+
 ## Execução reproduzível
 
 Pré-requisitos de desenvolvimento são Node 24 e pnpm 11.25.0. O lockfile fixa as dependências de desenvolvimento. O frontend publicado utiliza os módulos locais de PDF.js.
@@ -111,4 +113,4 @@ A tela isolada fica em `http://127.0.0.1:4181/`. Ela inicializa um banco descart
 
 Novos arquivos principais são `public/pdf-orders.js`, `public/pdf-import-view.js`, os arquivos locais e a licença de PDF.js em `public/vendor/pdfjs/`, a Edge Function, as migrações incrementais, `test/pdf-orders.test.mjs`, `test/pdf-import-database.test.mjs`, `scripts/build-pdf-edge.mjs`, `scripts/pdf-import-harness.mjs`, este documento e os lockfiles de desenvolvimento.
 
-Foram adaptados `public/app.js`, `public/api.js`, `public/domain.js`, `public/picking-access.js`, `public/history.js`, `public/warehouse.js`, `public/style.css`, `server.mjs`, `package.json`, `.gitignore` e `supabase/config.toml`. O ajuste do servidor local adiciona o MIME de módulos `.mjs`. A migração estende as funções de salvamento, busca e dashboard existentes e adiciona proteção documental.
+Foram adaptados `public/app.js`, `public/api.js`, `public/domain.js`, `public/picking-access.js`, `public/history.js`, `public/warehouse.js`, `public/style.css`, `server.mjs`, `package.json`, `.gitignore`, `.github/workflows/pages.yml` e `supabase/config.toml`. O ajuste do servidor local adiciona o MIME de módulos `.mjs`. As migrações estendem as funções de salvamento, busca e dashboard existentes e adicionam proteção documental.
