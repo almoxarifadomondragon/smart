@@ -1,5 +1,5 @@
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.49.8';
-// Same extractor and pinned local PDF.js worker as the browser and fixture tests.
+// Canonical BMA/BPZ extractor shared with the browser, using pinned local PDF.js.
 import {readOrderPdf,PDF_LIMITS} from '../../../public/pdf-orders.js';
 
 const cors={'Access-Control-Allow-Origin':'https://almoxarifadomondragon.github.io','Access-Control-Allow-Headers':'authorization,apikey,content-type','Access-Control-Allow-Methods':'POST,OPTIONS'};
