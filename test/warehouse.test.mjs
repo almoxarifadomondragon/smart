@@ -73,5 +73,5 @@ test('etiqueta permanente mantém URL; consulta preserva ocorrências e origem',
  assert.match(physicalContentsView(contents),/Nota Fiscal/);
  assert.match(physicalContentsView(contents),/0001/);
  assert.match(manifestCsv(a),/"Nota Fiscal"/);
- assert.match(manifestCsv(a),/"0001"$/);
+ assert.match(manifestCsv(a),/"0001";"Legado"$/);
 });

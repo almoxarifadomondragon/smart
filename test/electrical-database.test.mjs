@@ -28,6 +28,7 @@ test('PostgreSQL: Elétrica opcional, snapshot imutável, CC, compatibilidade e 
  const physical=await rpc('create_physical_box',[d.id,randomUUID(),'Caixa teste'],['uuid','uuid','text']);
  d.boxes=d.boxes.map(b=>({...b,physical_box_id:physical.id}));
  const items=[{id:randomUUID(),code:'BMA0000001',project:'26005',station:'31050',qty:1,box:d.boxes[0].id}];
+ const duplicate=await rpc('preview_item_duplicates',[d.id,JSON.stringify(items[0])],['uuid','jsonb']);if(duplicate.total)items[0].duplicate_ack={fingerprint:duplicate.fingerprint,reason:'Operação independente no teste de Elétrica'};
  d=await rpc('save_picking_versioned',[d.id,d.project,d.station,JSON.stringify(d.boxes),JSON.stringify(items),d.revision],['uuid','text','text','jsonb','jsonb','bigint']);return {d,physical};
  };
  await actor(admin);await save(normal);
