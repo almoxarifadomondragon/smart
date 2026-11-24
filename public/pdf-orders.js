@@ -19,10 +19,10 @@ const decimal = text => {
 const clean = value => String(value||'').trim();
 export function validateOrderRow(row) {
  const errors=[];
- if(!/^VH\d{1,20}$/.test(row.order||''))errors.push('Pedido não identificado');
+ if(!/^(?:VH|EZ)\d{1,20}$/.test(row.order||''))errors.push('Pedido não identificado');
  if(!/^\d{1,20}$/.test(row.line||''))errors.push('Referência L: não identificada');
  if(!/^\d{1,20}$/.test(row.sequence||''))errors.push('Sequencial não identificado');
- if(!/^BPZ\d{7}$/.test(row.code||''))errors.push('Código BPZ inválido');
+ if(!/^(?:BMA|BPZ)\d{7}$/.test(row.code||''))errors.push('Código BMA/BPZ inválido');
  for(const key of ['project','station'])if(!/^\d{1,20}$/.test(row[key]||''))errors.push(key==='project'?'Projeto não identificado':'Estação não identificada');
  if(!Number.isFinite(row.ordered)||row.ordered<=0||row.ordered>999999||Math.abs(Math.round(row.ordered*100)-row.ordered*100)>0.00001)errors.push('Quantidade solicitada inválida');
  if(!clean(row.description))errors.push('Descrição não identificada');
@@ -33,7 +33,7 @@ export function parseOrderPages(pages) {
  const labels=[];
  for(const [index,items] of pages.entries()) {
   const lines=textRows(items),all=lines.map(l=>l.text).join('\n');
-  const order=all.match(/Pedido\s+(VH\d+)/i)?.[1];
+  const order=all.match(/Pedido\s+((?:VH|EZ)\d+)/i)?.[1];
   if(order&&result.order&&order!==result.order)throw Error('O arquivo contém pedidos diferentes. Separe os documentos.');
   result.order ||= order||'';
   result.date ||= all.match(/Data\s+(\d{2}\/\d{2}\/\d{4})/)?.[1]||'';
@@ -50,28 +50,28 @@ export function parseOrderPages(pages) {
    for(const cell of line.cells){
     if(!/Ord:/.test(cell.text))continue;
     const columnText=line.cells.filter(c=>c.x>=cell.x&&c.x<cell.x+185).map(c=>c.text).join(' ');
-    const label=columnText.match(/Ord:\s*(VH\d+)\s*-\s*L:\s*(\d+)/i);
+    const label=columnText.match(/Ord:\s*((?:VH|EZ)\d+)\s*-\s*L:\s*(\d+)/i);
     if(!label)continue;
     const below=lines.filter(l=>l.y<line.y&&l.y>line.y-65).flatMap(l=>l.cells.filter(c=>c.x>=cell.x&&c.x<cell.x+185).map(c=>c.text)).join(' ');
-    labels.push({order:label[1],line:label[2],code:below.match(/Art:\s*(BPZ\d{7})/i)?.[1],dest:below.match(/Dest:\s*(\d+)\s*-\s*(\d+)/i),qty:decimal(below.match(/QTY:\s*([\d,.]+)/i)?.[1])});
+    labels.push({order:label[1],line:label[2],code:below.match(/Art:\s*((?:BMA|BPZ)\d{7})/i)?.[1],dest:below.match(/Dest:\s*(\d+)\s*-\s*(\d+)/i),qty:decimal(below.match(/QTY:\s*([\d,.]+)/i)?.[1])});
    }
   }
   if(!/Linha do|Linha\s+do/i.test(all)||!/Pedido/.test(all)||!/DESCRI/i.test(all))continue;
   const tableHeader=lines.findIndex(l=>/DESCRI/i.test(l.text));
   const starts=lines.map((line,i)=>({line,i})).filter(({line,i})=>i>tableHeader&&(
-   line.cells.some(c=>c.x>60&&c.x<355&&/^BPZ\d{7}\s*-/.test(c.text))||
+   line.cells.some(c=>c.x>60&&c.x<355&&/^(?:BMA|BPZ)\d{7}\s*-/.test(c.text))||
    (line.cells.some(c=>c.x>=32&&c.x<60&&/^\d+$/.test(c.text))&&line.cells.some(c=>c.x>=60&&c.x<355))
   ));
   for(const [position,start] of starts.entries()){
-   const codeCell=start.line.cells.find(c=>/^BPZ\d{7}\s*-/.test(c.text))||start.line.cells.find(c=>c.x>=60&&c.x<355);
+   const codeCell=start.line.cells.find(c=>/^(?:BMA|BPZ)\d{7}\s*-/.test(c.text))||start.line.cells.find(c=>c.x>=60&&c.x<355);
    const block=lines.slice(start.i,starts[position+1]?.i??lines.length);
    const detail=block.find(l=>/L:\s*\d+/.test(l.text));
    const target=detail?.text.match(/L:\s*(\d+)\s*-\s*(\d+)\s*-\s*(\d+)/);
-   const prefix=codeCell.text.match(/^(BPZ\d{7})\s*-\s*(.*)/);
+   const prefix=codeCell.text.match(/^((?:BMA|BPZ)\d{7})\s*-\s*(.*)/);
    const descriptionEnd=block.findIndex(l=>/Fab\.|L:\s*\d+/.test(l.text));
    const descriptionCells=block.slice(0,descriptionEnd<0?1:descriptionEnd).flatMap(l=>l.cells.filter(c=>c.x>=codeCell.x&&c.x<355).map(c=>c.text)).join(' ');
    const quantity=start.line.cells.find(c=>c.x>=355&&c.x<398)?.text;
-   const row={order:result.order,sequence:start.line.cells.find(c=>c.x<60&&/^\d+$/.test(c.text))?.text||'',line:target?.[1]||detail?.text.match(/L:\s*(\d+)/)?.[1]||'',code:prefix?.[1]||'',description:descriptionCells.replace(/^BPZ\d{7}\s*-\s*/,''),ordered:decimal(quantity),project:target?.[2]||'',station:target?.[3]||'',drawing:detail?.text.match(/Plano:\s*(\S+)/i)?.[1]||'',revision:detail?.text.match(/Rev:\s*(\S+)/i)?.[1]||'',due:detail?.text.match(/\d{2}\/\d{2}\/\d{4}/)?.[0]||'',page:index+1,warnings:[]};
+   const row={order:result.order,sequence:start.line.cells.find(c=>c.x<60&&/^\d+$/.test(c.text))?.text||'',line:target?.[1]||detail?.text.match(/L:\s*(\d+)/)?.[1]||'',code:prefix?.[1]||'',description:descriptionCells.replace(/^(?:BMA|BPZ)\d{7}\s*-\s*/,''),ordered:decimal(quantity),project:target?.[2]||'',station:target?.[3]||'',drawing:(result.order.startsWith('EZ')?detail?.cells.filter(c=>c.x<355).map(c=>c.text).join(' ').match(/Plano:\s*(.*?)(?:\s+Rev:|$)/i)?.[1]?.trim():detail?.text.match(/Plano:\s*(\S+)/i)?.[1])||'',revision:detail?.text.match(/Rev:\s*(\S+)/i)?.[1]||'',due:detail?.text.match(/\d{2}\/\d{2}\/\d{4}/)?.[0]||'',page:index+1,warnings:[]};
    const detailQty=decimal(detail?.cells.find(c=>c.x>=355&&c.x<398)?.text);
    if(detailQty!==null&&detailQty!==row.ordered)row.warnings.push('Quantidade da linha difere do detalhamento');
    row.errors=validateOrderRow(row);

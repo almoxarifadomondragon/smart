@@ -36,8 +36,8 @@ const parseQrQuantity = raw => readQuantity(raw, true);
 export const formatQty = value => Number(value).toLocaleString('pt-BR',{useGrouping:false,minimumFractionDigits:2,maximumFractionDigits:2});
 export const totalQty = items => items.reduce((sum,item)=>sum+Math.round(item.qty*100),0)/100;
 export function manifestCsv(doc) {
-  const rows = [['Separação','BMA','Projeto','Estação','Quantidade','Pedido de compras','Item do pedido','Prefixo QR','Caixa','Leitura','Almoxarife','Nota Fiscal'],
-    ...doc.items.map(i=>[pad(doc.number),i.code,i.project,i.station,formatQty(i.qty),i.source_order||i.purchase_order||'',i.purchase_order_item||'',i.qr_prefix||'',doc.boxes.find(b=>b.id===i.box)?.name,new Date(i.scanned_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}),i.operator,i.invoice_number||''])];
+  const rows = [['Separação','Código BMA/BPZ','Projeto','Estação','Quantidade','Pedido de compras','Item do pedido','Prefixo QR','Caixa','Leitura','Almoxarife','Nota Fiscal','Origem'],
+    ...doc.items.map(i=>[pad(doc.number),i.code,i.project,i.station,formatQty(i.qty),i.source_order||i.purchase_order||'',i.purchase_order_item||'',i.qr_prefix||'',doc.boxes.find(b=>b.id===i.box)?.name,new Date(i.scanned_at).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}),i.operator,i.invoice_number||'',i.source||'Legado'])];
   return '\ufeff'+rows.map(row=>row.map(v=>'"'+String(v??'').replace(/^[=+@-]/,"'$&").replace(/"/g,'""')+'"').join(';')).join('\r\n');
 }
 export function validatePurchase(order='',line='') {
@@ -51,10 +51,10 @@ export function parseCode(raw) {
 }
 export function parseQR(raw) {
   const text = raw.trim();
-  if (/^BMA\d{7}$/i.test(text)) return {code:parseCode(text)};
+  if (/^(?:BMA|BPZ)\d{7}$/i.test(text)) return {code:parseCode(text)};
   if (text.includes('$')) {
     const parts = text.split('$').map(part=>part.trim());
-    if (parts.length!==7 || parts.some(part=>!part)) throw new Error('QR incompleto: esperado prefixo$BMA$projeto$estação$quantidade$pedido$item.');
+    if (parts.length!==7 || parts.some(part=>!part)) throw new Error('QR incompleto: esperado prefixo$BMA/BPZ$projeto$estação$quantidade$pedido$item.');
     const [qr_prefix,rawCode,project,station,rawQty,purchase_order,purchase_order_item] = parts;
     if (qr_prefix.length>80 || project.length>120 || station.length>120) throw new Error('QR contém campos muito longos.');
     validatePurchase(purchase_order,purchase_order_item);
@@ -70,7 +70,7 @@ export function parseQR(raw) {
   }
   if (!values || typeof values !== 'object') throw new Error('Formato do QR code não reconhecido.');
   values = Object.fromEntries(Object.entries(values).map(([k,v])=>[k.toLowerCase(),v]));
-  const code = parseCode(String(values.bma ?? values.codigo ?? values['código'] ?? values.code ?? ''));
+  const code = parseCode(String(values.bma ?? values.bpz ?? values.codigo ?? values['código'] ?? values.code ?? ''));
   const project = String(values.projeto ?? values.project ?? '').trim();
   const station = String(values['estação'] ?? values.estacao ?? values.station ?? '').trim();
   const qty = parseQrQuantity(values.quantidade ?? values.qty ?? 1);

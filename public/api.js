@@ -58,3 +58,5 @@ export const pdfOrderFile=id=>request('/functions/v1/import-pdf-order','POST',{f
 export const cancelPdfImport=(id,reason)=>request('/rest/v1/rpc/cancel_pdf_import','POST',{p_id:id,p_reason:reason});
 export const reviewPdfOrderLine=(file,index,reason)=>request('/rest/v1/rpc/review_pdf_order_line','POST',{p_file:file,p_index:index,p_reason:reason});
 export const pdfImportDetails=id=>request('/rest/v1/rpc/pdf_import_details','POST',{p_id:id});
+
+export const previewItemDuplicates=(document,item)=>request('/rest/v1/rpc/preview_item_duplicates','POST',{p_document:document,p_item:item});

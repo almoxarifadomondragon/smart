@@ -72,10 +72,10 @@ export function physicalContentsView(result,{compact=false,receipt=false}={}){
   '<p>Projeto '+esc(box.project)+' · Estação '+esc(box.station)+' · '+physicalStatus(box.status)+'</p></div>'+
   (compact?'':'<div class="actions"><button data-action="physical-label">Gerar etiqueta permanente</button>'+
   (box.can_close?'<button data-action="physical-close">Fechar caixa</button>':'')+'</div>')+'</div><div class="card-body">'+
-  '<p><strong>'+documents.length+'</strong> romaneio(s) · <strong>'+items.length+'</strong> registro(s) BMA · <strong>'+formatQty(total_units)+'</strong> unidades registradas</p>'+
+  '<p><strong>'+documents.length+'</strong> romaneio(s) · <strong>'+items.length+'</strong> registro(s) BMA/BPZ · <strong>'+formatQty(total_units)+'</strong> unidades registradas</p>'+
   (receipt?'':'<p class="notice">Histórico de materiais registrados e associados à caixa. Estas quantidades não representam o saldo físico atual.</p>')+
   '<div class="actions">'+documents.map(d=>'<span>'+ (compact?'#'+pad(d.number):open(d.id,d.number))+' · '+status(d.status)+'</span>').join('')+'</div>'+
-  '<div class="table-wrap"><table><thead><tr><th>BMA</th><th>Qtd.</th><th>Nota Fiscal</th><th>Pedido</th><th>Item do pedido</th><th>Romaneio</th><th>Data/hora da separação</th><th>Almoxarife</th></tr></thead><tbody>'+
+  '<div class="table-wrap"><table><thead><tr><th>Código BMA/BPZ</th><th>Qtd.</th><th>Nota Fiscal</th><th>Pedido</th><th>Item do pedido</th><th>Romaneio</th><th>Data/hora da separação</th><th>Almoxarife</th></tr></thead><tbody>'+
   items.map(i=>'<tr><td class="code">'+esc(i.code)+'</td><td>'+formatQty(i.qty)+'</td><td>'+esc(i.invoice_number||'—')+'</td><td>'+esc(i.source_order||i.purchase_order||'—')+'</td><td>'+esc(i.purchase_order_item||'—')+'</td><td>'+
    (compact?'#'+pad(i.document_number):open(i.document_id,i.document_number))+'</td><td>'+esc(date(i.scanned_at||i.created_at))+'</td><td>'+esc(i.operator||'—')+'</td></tr>').join('')+
   '</tbody></table></div>'+(!items.length?'<p class="empty">Nenhum material associado.</p>':'')+'</div></section>';
@@ -90,7 +90,7 @@ export function deliveryStatusView(delivery,{admin=false,operate=true}={}){
  const {email_state:state,snapshot}=delivery;
  return '<section class="card"><div class="card-body"><h2>Caixa fechada — Entrega registrada</h2>'+
   '<p>'+esc(delivery.closed_by_name)+' · '+esc(deliveryDate(delivery.closed_at))+'</p>'+
-  '<p>'+snapshot.documents.length+' romaneio(s) · '+snapshot.items.length+' registros BMA · '+formatQty(snapshot.total_units)+' unidades</p>'+
+  '<p>'+snapshot.documents.length+' romaneio(s) · '+snapshot.items.length+' registros BMA/BPZ · '+formatQty(snapshot.total_units)+' unidades</p>'+
   (state?'<p>E-mail: <strong>'+esc(deliveryEmailLabel(state))+'</strong></p>':'')+
   '<div class="actions"><button data-action="physical-receipt">Comprovante de entrega</button>'+
   (state?'<button data-action="physical-refresh">Atualizar estado do e-mail</button>':'')+
@@ -106,7 +106,7 @@ export function deliveryReceiptView(delivery){
  return '<article class="delivery-receipt"><img src="./logo.png" width="160" alt="Mondragon Assembly">'+
   '<h2>Comprovante de entrega à Produção</h2><p>Entrega declarada por '+esc(closed_by_name)+' em '+esc(deliveryDate(closed_at))+
   ' (horário de São Paulo).</p><h3>Romaneios vinculados</h3><div class="table-wrap"><table><thead><tr>'+
-  '<th>Romaneio</th><th>Responsável</th><th>Confirmação</th><th>Registros BMA</th><th>Unidades</th>'+
+  '<th>Romaneio</th><th>Responsável</th><th>Confirmação</th><th>Registros BMA/BPZ</th><th>Unidades</th>'+
   '</tr></thead><tbody>'+manifests+'</tbody></table></div>'+physicalContentsView({
    ...snapshot,documents:snapshot.documents.map(doc=>({...doc,status:'confirmed'}))
   },{compact:true,receipt:true})+(observations?'<section><h3>Observações da entrega</h3><p class="delivery-observations">'+esc(observations)+'</p></section>':'')+'</article>';

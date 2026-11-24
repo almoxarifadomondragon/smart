@@ -121,3 +121,6 @@ input.zero-quantity { border:2px solid #c9232b; }
 #recipient-review #electrical-help{font-size:14px;color:#545b67;line-height:1.6}
 #recipient-review .card-body>p,#recipient-review .card-body>ul{overflow-wrap:anywhere}
 @media(max-width:520px){#recipient-review{margin:10px}.electrical-choice{padding:12px}}
+.item-source{display:block;font-size:11px;color:#68717d;font-weight:400;margin-top:5px}
+#item-duplicate-review{margin:16px 0;overflow-wrap:anywhere}
+#item-duplicate-review textarea{width:100%;min-height:80px;font:inherit;border:1px solid #dfe2e8;border-radius:7px;padding:10px}
