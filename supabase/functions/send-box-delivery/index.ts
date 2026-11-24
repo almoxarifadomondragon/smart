@@ -68,9 +68,9 @@ Deno.serve(async req => {
   }
   const {snapshot,recipient_snapshot,closed_at,closed_by_name,observations} = claim.delivery;
   const {box,documents,items,total_units} = snapshot;
-  const documentsTable = table(['Romaneio','Responsável','Confirmação','Registros BMA','Unidades'],
+  const documentsTable = table(['Romaneio','Responsável','Confirmação','Registros BMA/BPZ','Unidades'],
    documents.map((doc: any) => [manifest(doc.number),doc.responsible,date(doc.confirmed_at),doc.item_count,number(doc.total_units)]));
-  const itemsTable = table(['BMA','Qtd.','Nota Fiscal','Pedido','Item do pedido','Romaneio','Leitura','Almoxarife'],
+  const itemsTable = table(['Código BMA/BPZ','Qtd.','Nota Fiscal','Pedido','Item do pedido','Romaneio','Leitura','Almoxarife'],
    items.map((item: any) => [item.code,number(item.qty),item.invoice_number||'—',item.purchase_order||'—',
     item.purchase_order_item||'—',manifest(item.document_number),date(item.scanned_at),item.operator]));
   const link = origin + '/smart/#caixa_fisica=' + encodeURIComponent(id);
@@ -82,7 +82,7 @@ Deno.serve(async req => {
    '<p>'+escape(box.code)+' · '+escape(box.name)+'<br>Projeto '+escape(box.project)+' · Estação '+escape(box.station)+
    '<br>Entrega declarada por '+escape(closed_by_name)+'<br>Data/hora original da entrega: '+escape(date(closed_at))+'</p>' +
    '<h2>Romaneios vinculados ('+documents.length+')</h2>'+documentsTable+
-   '<h2>Materiais</h2>'+itemsTable+'<p>'+items.length+' registros BMA · '+number(total_units)+' unidades</p>'+
+   '<h2>Materiais</h2>'+itemsTable+'<p>'+items.length+' registros BMA/BPZ · '+number(total_units)+' unidades</p>'+
    notes+'<p><a href="'+escape(link)+'">Consultar caixa física '+escape(box.code)+'</a></p></div>';
   const transport = nodemailer.createTransport({
    host:'smtp.gmail.com',port:465,secure:true,auth:{user:sender,pass},
